@@ -87,10 +87,12 @@ def write_data_file(dataframe, row_inds, data_type, base_dir):
     for i in row_inds:
         name = os.path.join(dataframe.loc[i,'file_path'], dataframe.loc[i,'img_file_name'])
         label = dataframe.loc[i, 'object_annotation_category']
+        if label in ['badfocus<artefact', 'detritus', 'bubble']:
+            label = 'not_useful'
         f.write("%s,%s\n"%(name, label))
     f.close()
 
-def make_train_test_split(df):
+def make_train_test_split(df, exp_name):
     many_inds = np.array(df.index)
     train_rows = []
     valid_rows = []
@@ -106,11 +108,12 @@ def make_train_test_split(df):
         valid_rows.extend(list(this_label_inds[:n_val]))
         train_rows.extend(list(this_label_inds[n_val:]))
 
-    overall_dir = os.path.join('experiments', 'most_and_balanced')
+    overall_dir = os.path.join('experiments', exp_name)
     base_dir = os.path.join(datadir, overall_dir)
     if not os.path.exists(base_dir):
         os.makedirs(base_dir)
     write_data_file(df, valid_rows, 'valid', base_dir)
     write_data_file(df, train_rows, 'train', base_dir)
 
-make_train_test_split(many_dd)
+exp_name = 'most_merged'
+make_train_test_split(many_dd, exp_name)

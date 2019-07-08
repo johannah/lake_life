@@ -100,7 +100,7 @@ def train_model(model, dataloaders, optimizer, criterion, num_epochs=25, device=
 if __name__ == '__main__':
     #load_model = 'experiments/most_and_balanced/checkpoints/ckpt00020.pth'
     load_model = ''
-    name = 'most_and_balanced'
+    name = 'most_merged'
     datadir = './'
 
     write_dir = os.path.join('experiments', name, 'checkpoints')

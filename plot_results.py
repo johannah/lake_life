@@ -84,7 +84,7 @@ def plot_error(iinput, img_filename, label, predicted, filename, suptitle):
     ax[1].imshow(timg[:,:,0])
     ax[1].set_title('T%02d-%s'%(label, class_names[label]))
     f.suptitle(suptitle)
-    plt.savefig(filename)
+    plt.savefig(filename.replace('.jpg', '_P%s_T%s.png'%(class_names[predicted], class_names[label])))
     plt.close()
 
 def evaluate_model(model, dataloaders, basename=''):
@@ -117,7 +117,8 @@ def evaluate_model(model, dataloaders, basename=''):
 
              ## keep track of everything we got wrong
              wrong_inds = [ind for ind,(lp,l) in enumerate(zip(lpred, llist)) if not lp==l]
-             if cnt < 5000:
+             #if cnt < 5000:
+             if True:
                  for wi in wrong_inds:
                      nn = (cnt*inputs.shape[0])+wi
                      name = os.path.join(error_dir, 'E%06d_'%nn + 'D%05d'%didx[wi] + os.path.split(img_path[wi])[1])
