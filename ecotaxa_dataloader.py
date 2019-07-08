@@ -22,6 +22,7 @@ class EcotaxaDataset(Dataset):
         self.random_state = np.random.RandomState(seed)
         # load file data
         self.input_size = 224
+        print('loading csv:%s'%csv_file)
         assert os.path.exists(csv_file); # csv file given doesnt exist
         f = open(csv_file, 'r')
 
@@ -39,10 +40,12 @@ class EcotaxaDataset(Dataset):
              ])
         self.indexes = np.arange(len(self.img_filepaths))
         if classes == '':
+            print('finding classes')
             self.classes = sorted(list(set(self.img_classes)))
         else:
             self.classes = classes
         if weights == '':
+            print('finding weights')
             self.find_class_weights()
         else:
             self.weights=weights
@@ -57,14 +60,14 @@ class EcotaxaDataset(Dataset):
 
         # prevent 0 weight on any by adding .2
         self.class_counts = np.array(class_counts)
-        self.weights = 1./self.class_counts
+        self.weights = (1./self.class_counts)+.1
 
     def __len__(self):
         return len(self.img_filepaths)
 
     def rotate_image(self, image, max_angle):
         angle = self.random_state.randint(-max_angle, max_angle)
-        rotated = transform.rotate(image, angle, resize=False, center=None, order=1, mode='constant', cval=255, clip=True, preserve_range=True)
+        rotated = transform.rotate(image, angle, resize=True, center=None, order=1, mode='constant', cval=255, clip=True, preserve_range=True)
         return rotated
 
     def crop_to_size(self, image, h, w):
@@ -96,6 +99,7 @@ class EcotaxaDataset(Dataset):
         filepath = self.img_filepaths[idx]
         class_name = self.img_classes[idx]
         label = self.img_labels[idx]
+        #print(idx, filepath, class_name, label)
         image = imread(filepath)
         # images have an annotation that gives the "1 mm" scale of the image
         hh,ww,c = image.shape
@@ -105,4 +109,31 @@ class EcotaxaDataset(Dataset):
         image = self.add_padding(image, h=self.input_size, w=self.input_size)
         image = Image.fromarray(image, mode='RGB')
         image = self.transforms(image)
-        return image[0][None], label, filepath, class_name
+        return image[0][None], label, filepath, class_name, idx
+
+#if __name__ == '__main__':
+#    import matplotlib
+#    matplotlib.use("Agg")
+#    import matplotlib.pyplot as plt
+#    bdir = 'experiments/most_and_balanced'
+#    train_ds = EcotaxaDataset(csv_file=os.path.join(bdir,'train.csv'), seed=34)
+#    #valid_ds = EcotaxaDataset(csv_file='valid.csv', seed=334, classes=class_names, weights=class_weights)
+#    class_names = train_ds.classes
+#    class_weights = train_ds.weights
+#    #ds = {'train':train_ds, 'valid':valid_ds}
+#    ds = {'train':train_ds}
+#    #for phase in ds.keys():
+#    for phase in ds.keys():
+#        if not os.path.exists(phase):
+#            os.makedirs(phase)
+#        for i in range(len(ds[phase])):
+#            inputs, labels, img_path, class_name, idx = ds[phase][i]
+#            f,ax = plt.subplots(1,2)
+#            ax[0].imshow(inputs[0].numpy())
+#            imo = imread(img_path)
+#            ax[1].imshow(imo[:,:,0])
+#            img_name = os.path.split(img_path)[1]
+#            plt.title(img_path)
+#            plt.savefig(os.path.join(phase, img_name))
+#            plt.close()
+#

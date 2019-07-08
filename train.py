@@ -16,7 +16,6 @@ use_gpu = torch.cuda.is_available()
 if use_gpu:
     print("Using CUDA")
 random_state = np.random.RandomState(394)
-CUDA_LAUNCH_BLOCKING=1
 
 def set_parameter_requires_grad(model, feature_extracting):
     if feature_extracting:
@@ -26,8 +25,8 @@ def set_parameter_requires_grad(model, feature_extracting):
 def train_model(model, dataloaders, optimizer, criterion, num_epochs=25, device='gpu'):
     since = time.time()
 
-    val_acc_history = []
-    train_acc_history = []
+    accuracies = {'train':[], 'valid':[]}
+    losses = {'train':[], 'valid':[]}
 
     best_model_wts = copy.deepcopy(model.state_dict())
     best_acc = 0.0
@@ -76,21 +75,19 @@ def train_model(model, dataloaders, optimizer, criterion, num_epochs=25, device=
                 running_loss += loss.item() * inputs.size(0)
                 running_corrects += torch.sum(preds == labels.data)
 
+
             epoch_loss = running_loss / len(dataloaders[phase].dataset)
             epoch_acc = running_corrects.double() / len(dataloaders[phase].dataset)
 
             print('{} Loss: {:.4f} Acc: {:.4f}'.format(phase, epoch_loss, epoch_acc))
 
+            accuracies[phase].append(epoch_acc)
+            losses[phase].append(epoch_loss)
             # deep copy the model
             if phase == 'valid' and epoch_acc > best_acc:
                 best_acc = epoch_acc
                 best_model_wts = copy.deepcopy(model.state_dict())
-            if phase == 'valid':
-                val_acc_history.append(epoch_acc)
-                print('adding valid accuracy', len(val_acc_history))
-            if phase == 'train':
-                print('adding train accuracy', len(train_acc_history))
-                train_acc_history.append(epoch_acc)
+
 
     time_elapsed = time.time() - since
     print('Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
@@ -98,10 +95,10 @@ def train_model(model, dataloaders, optimizer, criterion, num_epochs=25, device=
 
     ## load best model weights
     #model.load_state_dict(best_model_wts)
-    return model, optimizer, val_acc_history, train_acc_history, best_model_wts
+    return model, optimizer, accuracies, losses, best_model_wts
 
 if __name__ == '__main__':
-    #load_model = 'checkpoints/ckpt00021.pth'
+    #load_model = 'experiments/most_and_balanced/checkpoints/ckpt00020.pth'
     load_model = ''
     name = 'most_and_balanced'
     datadir = './'
@@ -175,45 +172,54 @@ if __name__ == '__main__':
     optimizer = optim.Adam(params_to_update, lr=1e-3)
 
     # Setup the loss fxn
+    #criterion = nn.CrossEntropyLoss(weight=torch.Tensor(class_weights).to(device))
     criterion = nn.CrossEntropyLoss(weight=torch.Tensor(class_weights).to(device))
-    num_epochs_bt_saves = 20
+    num_epochs_bt_saves = 10
 
     if not os.path.exists(write_dir):
         os.makedirs(write_dir)
 
-    if load_model == '':
-        vhistory = []
-        thistory = []
-        cnt_start = 0
-    else:
+    all_accuracy = {'train':[], 'valid':[]}
+    all_losses = {'train':[], 'valid':[]}
+    cnt_start = 1
+    best_model_wts = None
+    if load_model != '':
         print('loading from %s'%load_model)
         save_dict = torch.load(load_model)
         rmodel.load_state_dict(save_dict['state_dict'])
+        rmodel.to(device)
         cnt_start = int(save_dict['cnt']/float(num_epochs_bt_saves))
+        best_model_wts = save_dict['best_model_wts']
         try:
-            vhistory = save_dict['valid_history']
-            thistory = save_dict['train_history']
+            all_accuracy = save_dict['accuracies']
+            all_losses = save_dict['losses']
         except:
-            vhistory = [0 for x in range(save_dict['cnt'])]
-            thistory = [0 for x in range(save_dict['cnt'])]
+            print("could not load histories")
         try:
             optimizer.load_state_dict(save_dict['opt'])
+            optimizer.to(device)
         except:
             print('could not load opt state dict')
 
     for cnt in range(cnt_start, cnt_start+1000):
         # Train and evaluate
         print("starting cnt sequence", cnt)
-        rmodel, optimizer, vhist, thist, best_model_wts = train_model(rmodel, dataloaders, optimizer, criterion, num_epochs=num_epochs_bt_saves, device=device)
-        vhistory.extend(vhist)
-        thistory.extend(thist)
         pp = {'state_dict':rmodel.state_dict(),
               'opt':optimizer.state_dict(),
-              'valid_history':vhistory,
-              'train_history':thistory,
+              'accuracy':all_accuracy,
+              'loss':all_losses,
               'cnt':cnt*num_epochs_bt_saves,
               'best_model_wts':best_model_wts,
+              'num_epochs_bt_saves':num_epochs_bt_saves,
                }
         cpath = os.path.join(write_dir, 'ckpt%05d.pth'%(cnt*num_epochs_bt_saves))
         print("saving model", cpath)
         torch.save(pp, cpath)
+
+        rmodel, optimizer, accuracies, losses, best_model_wts = train_model(rmodel, dataloaders, optimizer, criterion, num_epochs=num_epochs_bt_saves, device=device)
+        for phase in all_accuracy.keys():
+            all_accuracy[phase].extend(accuracies[phase])
+        for phase in all_losses.keys():
+            all_losses[phase].extend(losses[phase])
+
+

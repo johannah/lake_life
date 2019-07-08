@@ -11,7 +11,7 @@ import torchvision
 from torchvision import datasets, models, transforms
 import torch.nn as nn
 import torch
-
+from imageio import imread
 # make histogram plot
 # train on everything
 #
@@ -19,7 +19,6 @@ from sklearn.metrics import confusion_matrix
 from sklearn.utils.multiclass import unique_labels
 from ecotaxa_dataloader import EcotaxaDataset
 np.set_printoptions(precision=2)
-
 
 def plot_confusion_matrix(y_true, y_pred, classes,
                           normalize=False,
@@ -45,10 +44,8 @@ def plot_confusion_matrix(y_true, y_pred, classes,
         print("Normalized confusion matrix")
     else:
         print('Confusion matrix, without normalization')
-
     print(cm)
-
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(20,20))
     im = ax.imshow(cm, interpolation='nearest', cmap=cmap)
     ax.figure.colorbar(im, ax=ax)
     # We want to show all ticks...
@@ -74,23 +71,63 @@ def plot_confusion_matrix(y_true, y_pred, classes,
                     color="white" if cm[i, j] > thresh else "black")
     fig.tight_layout()
     plt.savefig(filename)
+    plt.close()
     print("finished plotting confusion", filename)
     return ax
 
+def plot_error(iinput, img_filename, label, predicted, filename, suptitle):
+    timg = imread(img_filename)
+    plt.figure()
+    f,ax = plt.subplots(1,2)
+    ax[0].imshow(iinput)
+    ax[0].set_title('P%02d-%s'%(predicted, class_names[predicted]))
+    ax[1].imshow(timg[:,:,0])
+    ax[1].set_title('T%02d-%s'%(label, class_names[label]))
+    f.suptitle(suptitle)
+    plt.savefig(filename)
+    plt.close()
+
 def evaluate_model(model, dataloaders, basename=''):
     model.eval()
+    cnt = 0
     for phase in ['valid', 'train']:
     #for phase in ['valid']:
+        error_dir = os.path.join(basename, phase)
+        if not os.path.exists(error_dir):
+            os.makedirs(error_dir)
+        error_inputs = []
+        error_filenames = []
+        error_labels = []
+        error_preds = []
         y_true = []
         y_pred = []
 
-        for inputs, labels, img_path, class_name in dataloaders[phase]:
+        cnt = 0
+        for inputs, labels, img_path, class_name, didx in dataloaders[phase]:
              inputs = inputs.to(device)
              labels = labels.to(device)
              outputs = model(inputs)
              _, preds = torch.max(outputs, 1)
-             y_true.extend(list(labels.detach().numpy()))
-             y_pred.extend(list(preds.detach().numpy()))
+             llist = list(labels.detach().numpy())
+             lpred = list(preds.detach().numpy())
+
+             ninputs = inputs.detach().numpy()
+             y_true.extend(llist)
+             y_pred.extend(lpred)
+
+             ## keep track of everything we got wrong
+             wrong_inds = [ind for ind,(lp,l) in enumerate(zip(lpred, llist)) if not lp==l]
+             if cnt < 5000:
+                 for wi in wrong_inds:
+                     nn = (cnt*inputs.shape[0])+wi
+                     name = os.path.join(error_dir, 'E%06d_'%nn + 'D%05d'%didx[wi] + os.path.split(img_path[wi])[1])
+                     plot_error(ninputs[wi,0], img_path[wi], llist[wi], lpred[wi], name, img_path[wi])
+                     error_inputs.append(ninputs[wi,0])
+                     error_filenames.append(img_path[wi])
+                     error_labels.append(llist[wi])
+                     error_preds.append(lpred[wi])
+             cnt+=inputs.shape[0]
+
         # Plot non-normalized confusion matrix
         plot_confusion_matrix(y_true, y_pred, classes=class_names,
                               title='Confusion matrix, without normalization',
@@ -103,22 +140,35 @@ def evaluate_model(model, dataloaders, basename=''):
 
 
 def load_latest_checkpoint(loaddir='checkpoints'):
-    search = sorted(glob(os.path.join(loaddir, '*.pth')))
+    search_path = os.path.join(loaddir, 'checkpoints', '*.pth')
+    print("searching", search_path)
+    search = sorted(glob(search_path))
     print('found %s checkpoints'%len(search))
     ckpt = search[-1]
     print('loading %s' %ckpt)
     return ckpt, torch.load(ckpt)
 
-if __name__ == '__main__':
-    ckpt_name, ckpt_dict = load_latest_checkpoint()
+def plot_history(history_dict, filename):
+    plt.figure()
+    plt.plot(history_dict['train'], label='train')
+    plt.plot(history_dict['valid'], label='valid')
+    plt.legend()
+    plt.savefig(filename)
+    plt.close()
 
-    bname = 'limited'
+if __name__ == '__main__':
+    exp_name = 'most_and_balanced'
+    exp_path = os.path.join('experiments', exp_name)
+    ckpt_name, ckpt_dict = load_latest_checkpoint(exp_path)
+    bname = ckpt_name.replace('.pth', '')
     datadir = './'
+    plot_history(ckpt_dict['loss'], bname+'_loss.png')
+    plot_history(ckpt_dict['accuracy'], bname+'_accuracy.png')
     batch_size = 32
-    train_ds = EcotaxaDataset(csv_file=os.path.join(bname, 'train.csv'),seed=34)
+    train_ds = EcotaxaDataset(csv_file=os.path.join(exp_path, 'train.csv'), seed=34)
     class_names = train_ds.classes
     class_weights = train_ds.weights
-    valid_ds = EcotaxaDataset(csv_file=os.path.join(bname, 'valid.csv'),seed=334, classes=class_names, weights=class_weights)
+    valid_ds = EcotaxaDataset(csv_file=os.path.join(exp_path, 'valid.csv'), seed=334, classes=class_names, weights=class_weights)
     train_dl = torch.utils.data.DataLoader(
             train_ds,
             batch_size=batch_size,
@@ -149,8 +199,8 @@ if __name__ == '__main__':
     #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     device = 'cpu'
     print('using', device)
-    rmodel = rmodel.to(device)
     print("loading state dict")
     rmodel.load_state_dict(ckpt_dict['state_dict'])
+    rmodel = rmodel.to(device)
     evaluate_model(rmodel, dataloaders, bname)
 
