@@ -16,7 +16,6 @@ images are color, but are the same across all channels (grayscale)
 bottom ~20 pixels in y axis are the scale measurement
 they all seem to have "1mm" at the bottom - are there any that are at a different zoom scale"""
 datadir = './data'
-
 data_labels = glob(os.path.join(datadir, '*', '*.tsv*'))
 for i in range(len(data_labels)):
   print('loading', data_labels[i])
@@ -109,11 +108,10 @@ def make_train_test_split(df, exp_name):
         train_rows.extend(list(this_label_inds[n_val:]))
 
     overall_dir = os.path.join('experiments', exp_name)
-    base_dir = os.path.join(datadir, overall_dir)
-    if not os.path.exists(base_dir):
-        os.makedirs(base_dir)
-    write_data_file(df, valid_rows, 'valid', base_dir)
-    write_data_file(df, train_rows, 'train', base_dir)
+    if not os.path.exists(overall_dir):
+        os.makedirs(overall_dir)
+    write_data_file(df, valid_rows, 'valid',  overall_dir)
+    write_data_file(df, train_rows, 'train',  overall_dir)
 
 exp_name = 'most_merged'
 make_train_test_split(many_dd, exp_name)

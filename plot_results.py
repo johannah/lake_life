@@ -88,56 +88,61 @@ def plot_error(iinput, img_filename, label, predicted, filename, suptitle):
     plt.close()
 
 def evaluate_model(model, dataloaders, basename=''):
-    model.eval()
+    #model.eval()
+    model.train()
     cnt = 0
     for phase in ['valid', 'train']:
     #for phase in ['valid']:
-        error_dir = os.path.join(basename, phase)
-        if not os.path.exists(error_dir):
-            os.makedirs(error_dir)
-        error_inputs = []
-        error_filenames = []
-        error_labels = []
-        error_preds = []
-        y_true = []
-        y_pred = []
+    #for phase in ['train']:
+        with torch.no_grad():
+            error_dir = os.path.join(basename, phase)
+            if not os.path.exists(error_dir):
+                os.makedirs(error_dir)
+            error_inputs = []
+            error_filenames = []
+            error_labels = []
+            error_preds = []
+            y_true = []
+            y_pred = []
 
-        cnt = 0
-        for inputs, labels, img_path, class_name, didx in dataloaders[phase]:
-             inputs = inputs.to(device)
-             labels = labels.to(device)
-             outputs = model(inputs)
-             _, preds = torch.max(outputs, 1)
-             llist = list(labels.detach().numpy())
-             lpred = list(preds.detach().numpy())
+            cnt = 0
+            for inputs, labels, img_path, class_name, didx in dataloaders[phase]:
+                 inputs = inputs.to(device)
+                 labels = labels.to(device)
+                 outputs = model(inputs)
+                 _, preds = torch.max(outputs, 1)
+                 llist = list(labels.detach().numpy())
+                 lpred = list(preds.detach().numpy())
 
-             ninputs = inputs.detach().numpy()
-             y_true.extend(llist)
-             y_pred.extend(lpred)
+                 ninputs = inputs.detach().numpy()
+                 y_true.extend(llist)
+                 y_pred.extend(lpred)
 
-             ## keep track of everything we got wrong
-             wrong_inds = [ind for ind,(lp,l) in enumerate(zip(lpred, llist)) if not lp==l]
-             #if cnt < 5000:
-             if True:
-                 for wi in wrong_inds:
-                     nn = (cnt*inputs.shape[0])+wi
-                     name = os.path.join(error_dir, 'E%06d_'%nn + 'D%05d'%didx[wi] + os.path.split(img_path[wi])[1])
-                     plot_error(ninputs[wi,0], img_path[wi], llist[wi], lpred[wi], name, img_path[wi])
-                     error_inputs.append(ninputs[wi,0])
-                     error_filenames.append(img_path[wi])
-                     error_labels.append(llist[wi])
-                     error_preds.append(lpred[wi])
-             cnt+=inputs.shape[0]
+                 ## keep track of everything we got wrong
+                 wrong_inds = [ind for ind,(lp,l) in enumerate(zip(lpred, llist)) if not lp==l]
+                 #if True:
+                 if cnt < 5000:
+                     for wi in wrong_inds:
+                         name = os.path.join(error_dir, 'C%05d_%02d'%(cnt,wi) + 'D%05d'%didx[wi] + os.path.split(img_path[wi])[1])
+                         plot_error(ninputs[wi,0], img_path[wi], llist[wi], lpred[wi], name, img_path[wi])
+                         error_inputs.append(ninputs[wi,0])
+                         error_filenames.append(img_path[wi])
+                         error_labels.append(llist[wi])
+                         error_preds.append(lpred[wi])
+                         #print(llist[wi], lpred[wi], outputs[wi])
+                 else:
+                     break
+                 cnt+=inputs.shape[0]
 
-        # Plot non-normalized confusion matrix
-        plot_confusion_matrix(y_true, y_pred, classes=class_names,
-                              title='Confusion matrix, without normalization',
-                              filename=basename+'_'+phase+'_'+'unnormalized_confusion.png')
+            # Plot non-normalized confusion matrix
+            plot_confusion_matrix(y_true, y_pred, classes=class_names,
+                                  title='Confusion matrix, without normalization',
+                                  filename=basename+'_'+phase+'_'+'unnormalized_confusion.png')
 
-        # Plot normalized confusion matrix
-        plot_confusion_matrix(y_true, y_pred, classes=class_names, normalize=True,
-                              title='Normalized confusion matrix',
-                              filename=basename+'_'+phase+'_'+'normalized_confusion.png')
+            # Plot normalized confusion matrix
+            plot_confusion_matrix(y_true, y_pred, classes=class_names, normalize=True,
+                                  title='Normalized confusion matrix',
+                                  filename=basename+'_'+phase+'_'+'normalized_confusion.png')
 
 
 def load_latest_checkpoint(loaddir='checkpoints'):
@@ -158,7 +163,7 @@ def plot_history(history_dict, filename):
     plt.close()
 
 if __name__ == '__main__':
-    exp_name = 'most_and_balanced'
+    exp_name = 'most_merged_v2'
     exp_path = os.path.join('experiments', exp_name)
     ckpt_name, ckpt_dict = load_latest_checkpoint(exp_path)
     bname = ckpt_name.replace('.pth', '')
@@ -182,7 +187,6 @@ if __name__ == '__main__':
         )
     dataloaders = {'train':train_dl, 'valid':valid_dl}
 
-
     # Load the pretrained model from pytorch
     rmodel = torchvision.models.resnet50(pretrained=True)
     num_epochs = 1000
@@ -202,6 +206,7 @@ if __name__ == '__main__':
     print('using', device)
     print("loading state dict")
     rmodel.load_state_dict(ckpt_dict['state_dict'])
+    del ckpt_dict
     rmodel = rmodel.to(device)
     evaluate_model(rmodel, dataloaders, bname)
 

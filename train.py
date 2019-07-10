@@ -12,10 +12,12 @@ import copy
 from ecotaxa_dataloader import EcotaxaDataset
 from IPython import embed
 
+torch.manual_seed(44)
+random_state = np.random.RandomState(394)
+
 use_gpu = torch.cuda.is_available()
 if use_gpu:
     print("Using CUDA")
-random_state = np.random.RandomState(394)
 
 def set_parameter_requires_grad(model, feature_extracting):
     if feature_extracting:
@@ -36,31 +38,28 @@ def train_model(model, dataloaders, optimizer, criterion, num_epochs=25, device=
         print('-' * 10)
 
         # Each epoch has a training and validation phase
-        for phase in ['train', 'valid']:
-            if phase == 'train':
-                model.train()  # Set model to training mode
-            else:
-                model.eval()   # Set model to evaluate mode
-
+        #for phase in ['train', 'valid']:
+        for phase in ['valid', 'train']:
+            model.train()  # Set model to training mode
+#            if phase == 'train':
+#                model.train()  # Set model to training mode
+#            else:
+#                model.eval()   # Set model to evaluate mode
+#
             running_loss = 0.0
             running_corrects = 0
 
-
+            n_batches = 0
             # Iterate over data.
-            for inputs, labels, filepaths, classnames in dataloaders[phase]:
+            for inputs, labels, filepaths, classnames, idxs in dataloaders[phase]:
                 inputs = inputs.to(device)
                 labels = labels.to(device)
-
                 # zero the parameter gradients
                 optimizer.zero_grad()
 
                 # forward
-                # track history if only in train
                 with torch.set_grad_enabled(phase == 'train'):
                     # Get model outputs and calculate loss
-                    # Special case for inception because in training it has an auxiliary output. In train
-                    #   mode we calculate the loss by summing the final output and the auxiliary output
-                    #   but in testing we only consider the final output.
                     outputs = model(inputs)
                     loss = criterion(outputs, labels)
 
@@ -72,15 +71,27 @@ def train_model(model, dataloaders, optimizer, criterion, num_epochs=25, device=
                         optimizer.step()
 
                 # statistics
+                n_batches += 1
                 running_loss += loss.item() * inputs.size(0)
                 running_corrects += torch.sum(preds == labels.data)
 
+                ncorr = torch.sum(preds == labels.data).cpu().numpy()
+                pcorr = ncorr/float(outputs.shape[0])
+
+                if pcorr < 0.6:
+                    print('---------------------------')
+                    print(phase, n_batches, pcorr)
+                    print(sorted(list((labels.cpu().numpy()))))
+                    print(labels.cpu().numpy())
+                    print(outputs.argmax(1).detach().cpu().numpy())
+                    print('correct %s/%s'%(ncorr, outputs.shape[0]))
 
             epoch_loss = running_loss / len(dataloaders[phase].dataset)
             epoch_acc = running_corrects.double() / len(dataloaders[phase].dataset)
 
-            print('{} Loss: {:.4f} Acc: {:.4f}'.format(phase, epoch_loss, epoch_acc))
 
+            print('{} Loss: {:.4f} Acc: {:.4f}'.format(phase, epoch_loss, epoch_acc))
+            print('used %s batches for calculation'%n_batches)
             accuracies[phase].append(epoch_acc)
             losses[phase].append(epoch_loss)
             # deep copy the model
@@ -98,9 +109,13 @@ def train_model(model, dataloaders, optimizer, criterion, num_epochs=25, device=
     return model, optimizer, accuracies, losses, best_model_wts
 
 if __name__ == '__main__':
-    #load_model = 'experiments/most_and_balanced/checkpoints/ckpt00020.pth'
     load_model = ''
-    name = 'most_merged'
+    #load_model = 'experiments/most_merged/checkpoints/ckptRDD00130.pth'
+    # goes bad after 120
+    #load_model = 'experiments/most_merged/checkpoints/ckptwt00120.pth'
+    #load_model = 'experiments/most_merged/checkpoints/ckptwt_eval00245.pth'
+    #load_model = 'experiments/most_merged/checkpoints/ckptwt00120.pth'
+    name = 'most_merged_v2'
     datadir = './'
 
     write_dir = os.path.join('experiments', name, 'checkpoints')
@@ -110,10 +125,8 @@ if __name__ == '__main__':
     class_counts = train_ds.class_counts
     class_weights = train_ds.weights
     valid_ds = EcotaxaDataset(csv_file=os.path.join('experiments', name, 'valid.csv'), seed=334, classes=class_names, weights=class_weights)
-    for cn, cc, cw in zip(class_names, class_counts, class_weights):
-        print('class:%s counts:%s weight:%.03f'%(cn, cc, cw))
-    train_weighted_sampler = torch.utils.data.sampler.WeightedRandomSampler(torch.FloatTensor(train_ds.img_weights), len(train_ds))
-    valid_weighted_sampler = torch.utils.data.sampler.WeightedRandomSampler(torch.FloatTensor(valid_ds.img_weights), len(valid_ds))
+    train_weighted_sampler = torch.utils.data.sampler.WeightedRandomSampler(torch.FloatTensor(train_ds.img_weights), len(train_ds), replacement=True)
+    valid_weighted_sampler = torch.utils.data.sampler.WeightedRandomSampler(torch.FloatTensor(valid_ds.img_weights), len(valid_ds), replacement=True)
     train_dl = torch.utils.data.DataLoader(
             train_ds,
             batch_size=batch_size,
@@ -127,7 +140,6 @@ if __name__ == '__main__':
             num_workers=2,
         )
     dataloaders = {'train':train_dl, 'valid':valid_dl}
-
 
     # Load the pretrained model from pytorch
     rmodel = torchvision.models.resnet50(pretrained=True)
@@ -162,42 +174,43 @@ if __name__ == '__main__':
         for name,param in rmodel.named_parameters():
             if param.requires_grad == True:
                 params_to_update.append(param)
-                #print("\t",name)
-#    else:
-#        for name,param in rmodel.named_parameters():
-#            if param.requires_grad == True:
-#                print("\t",name)
+                print("\t",name)
+    else:
+        for name,param in rmodel.named_parameters():
+            if param.requires_grad == True:
+                print("\t",name)
 
     # Observe that all parameters are being optimized
-    optimizer = optim.Adam(params_to_update, lr=1e-3)
+    optimizer = optim.Adam(params_to_update, lr=1e-4)
 
     # Setup the loss fxn
-    #criterion = nn.CrossEntropyLoss(weight=torch.Tensor(class_weights).to(device))
     criterion = nn.CrossEntropyLoss(weight=torch.Tensor(class_weights).to(device))
-    num_epochs_bt_saves = 10
+    #criterion = nn.CrossEntropyLoss(weight=torch.Tensor(class_weights).to(device))
+    num_epochs_bt_saves = 5
 
     if not os.path.exists(write_dir):
         os.makedirs(write_dir)
 
     all_accuracy = {'train':[], 'valid':[]}
     all_losses = {'train':[], 'valid':[]}
-    cnt_start = 1
+    cnt_start = 0
+    epoch_cnt = 0
     best_model_wts = None
     if load_model != '':
-        print('loading from %s'%load_model)
+        print('--------------------loading from %s'%load_model)
         save_dict = torch.load(load_model)
         rmodel.load_state_dict(save_dict['state_dict'])
         rmodel.to(device)
-        cnt_start = int(save_dict['cnt']/float(num_epochs_bt_saves))
+        cnt_start = int(save_dict['cnt'])
+        print("starting from cnt", cnt_start)
         best_model_wts = save_dict['best_model_wts']
-        try:
-            all_accuracy = save_dict['accuracies']
-            all_losses = save_dict['losses']
-        except:
-            print("could not load histories")
+        cnt_start = save_dict['cnt']
+        all_accuracy = save_dict['accuracy']
+        all_losses = save_dict['loss']
+        epoch_cnt = len(all_losses['train'])
+        print("have seen %s epochs"%epoch_cnt)
         try:
             optimizer.load_state_dict(save_dict['opt'])
-            optimizer.to(device)
         except:
             print('could not load opt state dict')
 
@@ -208,14 +221,15 @@ if __name__ == '__main__':
               'opt':optimizer.state_dict(),
               'accuracy':all_accuracy,
               'loss':all_losses,
-              'cnt':cnt*num_epochs_bt_saves,
+              'cnt':cnt,
               'best_model_wts':best_model_wts,
               'num_epochs_bt_saves':num_epochs_bt_saves,
+              'epoch_cnt': epoch_cnt,
                }
-        cpath = os.path.join(write_dir, 'ckpt%05d.pth'%(cnt*num_epochs_bt_saves))
+
+        cpath = os.path.join(write_dir, 'ckptwt_eval%05d.pth'%len(all_losses['train']))
         print("saving model", cpath)
         torch.save(pp, cpath)
-
         rmodel, optimizer, accuracies, losses, best_model_wts = train_model(rmodel, dataloaders, optimizer, criterion, num_epochs=num_epochs_bt_saves, device=device)
         for phase in all_accuracy.keys():
             all_accuracy[phase].extend(accuracies[phase])

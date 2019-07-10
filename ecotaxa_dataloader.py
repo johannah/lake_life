@@ -44,6 +44,7 @@ class EcotaxaDataset(Dataset):
             self.classes = sorted(list(set(self.img_classes)))
         else:
             self.classes = classes
+        self.find_class_counts()
         if weights == '':
             print('finding weights')
             self.find_class_weights()
@@ -52,15 +53,19 @@ class EcotaxaDataset(Dataset):
 
         self.img_labels = [self.classes.index(c) for c in self.img_classes]
         self.img_weights = self.weights[np.array(self.img_labels)]
+        print("CLASS WEIGHTS")
+        for cn, cc, cw in zip(self.classes, self.class_counts, self.weights):
+            print('class:%s counts:%s weight:%.03f'%(cn, cc, cw))
 
-    def find_class_weights(self):
+    def find_class_counts(self):
         class_counts = []
         for c in self.classes:
             class_counts.append(np.where(np.array(self.img_classes)==c)[0].shape[0])
-
-        # prevent 0 weight on any by adding .2
         self.class_counts = np.array(class_counts)
-        self.weights = (1./self.class_counts)+.1
+
+    def find_class_weights(self):
+        # prevent 0 weight on any by adding .2
+        self.weights = 1.0/self.class_counts
 
     def __len__(self):
         return len(self.img_filepaths)
