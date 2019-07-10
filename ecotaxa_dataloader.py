@@ -19,6 +19,7 @@ class EcotaxaDataset(Dataset):
         """
         self.img_filepaths = []
         self.img_classes = []
+        self.img_refined_classes = []
         self.random_state = np.random.RandomState(seed)
         # load file data
         self.input_size = 224
@@ -27,9 +28,10 @@ class EcotaxaDataset(Dataset):
         f = open(csv_file, 'r')
 
         for line in f.readlines():
-            n,l = line.strip().split(',')
-            self.img_filepaths.append(n)
-            self.img_classes.append(l)
+            ll = line.strip().split(',')
+            self.img_filepaths.append(ll[0])
+            self.img_classes.append(ll[1])
+            #self.refined_img_classes.append(ll[2])
 
         self.transforms = torchvision.transforms.Compose([
             torchvision.transforms.ColorJitter(hue=.05, saturation=.05),

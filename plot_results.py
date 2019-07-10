@@ -145,8 +145,8 @@ def evaluate_model(model, dataloaders, basename=''):
                                   filename=basename+'_'+phase+'_'+'normalized_confusion.png')
 
 
-def load_latest_checkpoint(loaddir='checkpoints'):
-    search_path = os.path.join(loaddir, 'checkpoints', '*.pth')
+def load_latest_checkpoint(loaddir='experiment_name', search='*.pth'):
+    search_path = os.path.join(loaddir, 'checkpoints', search)
     print("searching", search_path)
     search = sorted(glob(search_path))
     print('found %s checkpoints'%len(search))
@@ -163,7 +163,7 @@ def plot_history(history_dict, filename):
     plt.close()
 
 if __name__ == '__main__':
-    exp_name = 'most_merged_v2'
+    exp_name = 'limited'
     exp_path = os.path.join('experiments', exp_name)
     ckpt_name, ckpt_dict = load_latest_checkpoint(exp_path)
     bname = ckpt_name.replace('.pth', '')

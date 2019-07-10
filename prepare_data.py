@@ -39,11 +39,13 @@ dd.loc[:,'num'] = range(dd.shape[0])
 unique = list(set(dd['object_annotation_category']))
 dont_use = ['unknown', 'othertocheck', 'multiple<other']
 labels_to_use = []
+class_count = []
 for ztype in unique:
     count = np.sum(pandas.Series(dd['object_annotation_category']).str.count(ztype))
     if ztype.lower() not in dont_use:
       labels_to_use.append(ztype)
       print(ztype, count)
+      class_count.append(count)
 
 
 
@@ -82,13 +84,16 @@ def write_data_file(dataframe, row_inds, data_type, base_dir):
     fname = os.path.join(base_dir, data_type+'.csv')
     print('writing', fname)
     f = open(fname, 'w')
-
     for i in row_inds:
         name = os.path.join(dataframe.loc[i,'file_path'], dataframe.loc[i,'img_file_name'])
         label = dataframe.loc[i, 'object_annotation_category']
-        if label in ['badfocus<artefact', 'detritus', 'bubble']:
-            label = 'not_useful'
-        f.write("%s,%s\n"%(name, label))
+        if class_count[labels_to_use.index(label)] < 1000 :
+            class_label = 'small_class'
+        else:
+            class_label = label
+        #if label in ['badfocus<artefact', 'detritus', 'bubble']:
+        #    label = 'not_useful'
+        f.write("%s,%s,%s\n"%(name,class_label,label))
     f.close()
 
 def make_train_test_split(df, exp_name):
@@ -113,5 +118,6 @@ def make_train_test_split(df, exp_name):
     write_data_file(df, valid_rows, 'valid',  overall_dir)
     write_data_file(df, train_rows, 'train',  overall_dir)
 
-exp_name = 'most_merged'
+#exp_name = 'most_merged'
+exp_name = 'divided'
 make_train_test_split(many_dd, exp_name)

@@ -115,7 +115,7 @@ if __name__ == '__main__':
     #load_model = 'experiments/most_merged/checkpoints/ckptwt00120.pth'
     #load_model = 'experiments/most_merged/checkpoints/ckptwt_eval00245.pth'
     #load_model = 'experiments/most_merged/checkpoints/ckptwt00120.pth'
-    name = 'most_merged_v2'
+    name = 'divided'
     datadir = './'
 
     write_dir = os.path.join('experiments', name, 'checkpoints')
@@ -184,7 +184,7 @@ if __name__ == '__main__':
     optimizer = optim.Adam(params_to_update, lr=1e-4)
 
     # Setup the loss fxn
-    criterion = nn.CrossEntropyLoss(weight=torch.Tensor(class_weights).to(device))
+    criterion = nn.CrossEntropyLoss()
     #criterion = nn.CrossEntropyLoss(weight=torch.Tensor(class_weights).to(device))
     num_epochs_bt_saves = 5
 
