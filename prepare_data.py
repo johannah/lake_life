@@ -88,12 +88,13 @@ def write_data_file(dataframe, row_inds, data_type, base_dir):
         name = os.path.join(dataframe.loc[i,'file_path'], dataframe.loc[i,'img_file_name'])
         label = dataframe.loc[i, 'object_annotation_category']
         if class_count[labels_to_use.index(label)] < 1000 :
-            class_label = 'small_class'
-        else:
-            class_label = label
+            f.write("%s,%s\n"%(name,label))
+            #class_label = 'small_class'
+        #else:
+        #    class_label = label
         #if label in ['badfocus<artefact', 'detritus', 'bubble']:
         #    label = 'not_useful'
-        f.write("%s,%s,%s\n"%(name,class_label,label))
+        #f.write("%s,%s,%s\n"%(name,class_label,label))
     f.close()
 
 def make_train_test_split(df, exp_name):
@@ -119,5 +120,5 @@ def make_train_test_split(df, exp_name):
     write_data_file(df, train_rows, 'train',  overall_dir)
 
 #exp_name = 'most_merged'
-exp_name = 'divided'
+exp_name = 'small'
 make_train_test_split(many_dd, exp_name)

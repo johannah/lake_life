@@ -11,7 +11,7 @@ from IPython import embed
 from skimage import transform
 
 class EcotaxaDataset(Dataset):
-    def __init__(self, csv_file, seed, classes='', weights=''):
+    def __init__(self, csv_file, seed, classes='', weights='', augment=True):
         """
         Args:
             csv_file (string): Path to the csv file with image paths and annotations.
@@ -33,13 +33,21 @@ class EcotaxaDataset(Dataset):
             self.img_classes.append(ll[1])
             #self.refined_img_classes.append(ll[2])
 
-        self.transforms = torchvision.transforms.Compose([
-            torchvision.transforms.ColorJitter(hue=.05, saturation=.05),
-            torchvision.transforms.RandomHorizontalFlip(),
-            transforms.RandomVerticalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-             ])
+        self.augment = augment
+        if self.augment:
+            self.transforms = torchvision.transforms.Compose([
+                torchvision.transforms.ColorJitter(hue=.05, saturation=.05),
+                torchvision.transforms.RandomHorizontalFlip(),
+                transforms.RandomVerticalFlip(),
+                transforms.ToTensor(),
+                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+                 ])
+        else:
+            self.transforms = torchvision.transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+                 ])
+
         self.indexes = np.arange(len(self.img_filepaths))
         if classes == '':
             print('finding classes')
@@ -81,11 +89,17 @@ class EcotaxaDataset(Dataset):
         # if image is larger than (h,w) randomly crop it
         hh,ww,cc = image.shape
         if hh>h:
-          uch = self.random_state.randint(0,hh-h)
-          image = image[uch:uch+h]
+            if self.augment:
+                uch = self.random_state.randint(0,hh-h)
+            else:
+                uch = int((hh/2.0)-(h/2.0))
+            image = image[uch:uch+h]
         if ww > w:
-          ucw = self.random_state.randint(0,ww-w)
-          image = image[:,ucw:ucw+w]
+            if self.augment:
+                ucw = self.random_state.randint(0,ww-w)
+            else:
+                ucw = int((ww/2.0)-(w/2.0))
+            image = image[:,ucw:ucw+w]
         return image
 
     def add_padding(self, image, h, w):
@@ -111,7 +125,8 @@ class EcotaxaDataset(Dataset):
         # images have an annotation that gives the "1 mm" scale of the image
         hh,ww,c = image.shape
         image = image[:hh-20,:]
-        image = self.rotate_image(image, max_angle=45)
+        if self.augment:
+             image = self.rotate_image(image, max_angle=45)
         image = self.crop_to_size(image, h=self.input_size, w=self.input_size)
         image = self.add_padding(image, h=self.input_size, w=self.input_size)
         image = Image.fromarray(image, mode='RGB')

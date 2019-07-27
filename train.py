@@ -115,7 +115,7 @@ if __name__ == '__main__':
     #load_model = 'experiments/most_merged/checkpoints/ckptwt00120.pth'
     #load_model = 'experiments/most_merged/checkpoints/ckptwt_eval00245.pth'
     #load_model = 'experiments/most_merged/checkpoints/ckptwt00120.pth'
-    name = 'divided'
+    name = 'small'
     datadir = './'
 
     write_dir = os.path.join('experiments', name, 'checkpoints')

@@ -120,8 +120,8 @@ def evaluate_model(model, dataloaders, basename=''):
 
                  ## keep track of everything we got wrong
                  wrong_inds = [ind for ind,(lp,l) in enumerate(zip(lpred, llist)) if not lp==l]
-                 #if True:
-                 if cnt < 5000:
+                 if True:
+                 #if cnt < 5000:
                      for wi in wrong_inds:
                          name = os.path.join(error_dir, 'C%05d_%02d'%(cnt,wi) + 'D%05d'%didx[wi] + os.path.split(img_path[wi])[1])
                          plot_error(ninputs[wi,0], img_path[wi], llist[wi], lpred[wi], name, img_path[wi])
@@ -163,18 +163,23 @@ def plot_history(history_dict, filename):
     plt.close()
 
 if __name__ == '__main__':
-    exp_name = 'limited'
+    exp_name = 'small'
     exp_path = os.path.join('experiments', exp_name)
-    ckpt_name, ckpt_dict = load_latest_checkpoint(exp_path)
+    print(sys.argv)
+    if len(sys.argv)>1:
+        search  = sys.argv[1]
+    else:
+        search = '*.pth'
+    ckpt_name, ckpt_dict = load_latest_checkpoint(exp_path, search)
     bname = ckpt_name.replace('.pth', '')
     datadir = './'
     plot_history(ckpt_dict['loss'], bname+'_loss.png')
     plot_history(ckpt_dict['accuracy'], bname+'_accuracy.png')
     batch_size = 32
-    train_ds = EcotaxaDataset(csv_file=os.path.join(exp_path, 'train.csv'), seed=34)
+    train_ds = EcotaxaDataset(csv_file=os.path.join(exp_path, 'train.csv'), seed=34, augment=False)
     class_names = train_ds.classes
     class_weights = train_ds.weights
-    valid_ds = EcotaxaDataset(csv_file=os.path.join(exp_path, 'valid.csv'), seed=334, classes=class_names, weights=class_weights)
+    valid_ds = EcotaxaDataset(csv_file=os.path.join(exp_path, 'valid.csv'), seed=334, classes=class_names, weights=class_weights, augment=False)
     train_dl = torch.utils.data.DataLoader(
             train_ds,
             batch_size=batch_size,
