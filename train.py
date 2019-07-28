@@ -79,13 +79,13 @@ def train_model(model, dataloaders, optimizer, criterion, num_epochs=25, device=
                 ncorr = torch.sum(preds == labels.data).cpu().numpy()
                 pcorr = ncorr/float(outputs.shape[0])
 
-                if pcorr < 0.6:
-                    print('---------------------------')
-                    print(phase, n_batches, pcorr)
-                    print(sorted(list((labels.cpu().numpy()))))
-                    print(labels.cpu().numpy())
-                    print(outputs.argmax(1).detach().cpu().numpy())
-                    print('correct %s/%s'%(ncorr, outputs.shape[0]))
+                #if pcorr < 0.6:
+                #    print('---------------------------')
+                #    print(phase, n_batches, pcorr)
+                #    print(sorted(list((labels.cpu().numpy()))))
+                #    print(labels.cpu().numpy())
+                #    print(outputs.argmax(1).detach().cpu().numpy())
+                #    print('correct %s/%s'%(ncorr, outputs.shape[0]))
 
             epoch_loss = running_loss / len(dataloaders[phase].dataset)
             epoch_acc = running_corrects.double() / len(dataloaders[phase].dataset)
@@ -120,7 +120,7 @@ if __name__ == '__main__':
     datadir = './'
 
     write_dir = os.path.join('experiments', name, 'checkpoints')
-    batch_size = 32
+    batch_size = 64
     train_ds = UVPDataset(csv_file=os.path.join('experiments', name, 'train.csv'),seed=34)
     class_names = train_ds.classes
     class_counts = train_ds.class_counts

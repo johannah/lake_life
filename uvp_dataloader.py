@@ -129,29 +129,38 @@ class UVPDataset(Dataset):
     def __getitem__(self, idx):
         filepath = self.img_filepaths[idx]
         class_name = self.img_classes[idx]
-        label = self.img_labels[idx]
-        #print(idx, filepath, class_name, label)
-        image = imread(filepath)[:,:,0]
-        # images have an annotation that gives the "1 mm" scale of the image
-        hh,ww = image.shape
-        # remove label at bottom
-        bottom = 45 #np.argmin(image.sum(1))-10
-        image = image[:hh-bottom,:]
-        centerx,centery = self.get_center(image)
-        image = self.crop_to_size(image, self.input_size, self.input_size, centery, centerx)
-        centerx,centery = self.get_center(image)
-        #if self.augment:
-        #     #image = self.rotate_image(image, max_angle=45, center=(centerx,centery))
-        #     # center is cols, rows
-        #     image = self.rotate_image(image, max_angle=45, center=(centery,centerx))
-        #     print('2', image.shape)
-        centerx,centery = self.get_center(image)
-        image = self.crop_to_size(image, self.input_size, self.input_size, centery, centerx)
-        image = self.add_padding(image, h=self.input_size, w=self.input_size)
-        image = Image.fromarray(image, mode='L')
-        image = self.transforms(image)
-
-        return image[0][None], label, filepath, class_name, idx
+        try:
+            label = self.img_labels[idx]
+            #print(idx, filepath, class_name, label)
+            image = imread(filepath)[:,:,0]
+            # images have an annotation that gives the "1 mm" scale of the image
+            hh,ww = image.shape
+            # remove label at bottom
+            bottom = 45 #np.argmin(image.sum(1))-10
+            image = image[:hh-bottom,:]
+            centerx,centery = self.get_center(image)
+            image = self.crop_to_size(image, self.input_size, self.input_size, centery, centerx)
+            centerx,centery = self.get_center(image)
+            #if self.augment:
+            #     #image = self.rotate_image(image, max_angle=45, center=(centerx,centery))
+            #     # center is cols, rows
+            #     image = self.rotate_image(image, max_angle=45, center=(centery,centerx))
+            #     print('2', image.shape)
+            centerx,centery = self.get_center(image)
+            image = self.crop_to_size(image, self.input_size, self.input_size, centery, centerx)
+            image = self.add_padding(image, h=self.input_size, w=self.input_size)
+            image = Image.fromarray(image, mode='L')
+            image = self.transforms(image)
+            image = image[0][None]
+        except:
+            print("COULD NOT LOAD DATA FILE", idx)
+            print(filepath)
+            # tmp hack - actually that image seems messed up`:w
+            # TODO - figureout how to feed failed image to dataloader
+            # some uvp images wont load
+            rr = self.__getitem__(self.random_state.randint(0, self.__len__()))
+            image, label, filepath, class_name, idx = rr
+        return image, label, filepath, class_name, idx
 
 if __name__ == '__main__':
     import matplotlib
