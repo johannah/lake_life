@@ -95,14 +95,12 @@ class UVPDataset(Dataset):
         if hh>h:
             if self.augment:
                 uch = max(0, int((h/2.0)-center_y))
-                print("CENTERY",uch)
             else:
                 uch = max(0, int((hh/2.0)-(h/2.0)))
             image = image[uch:uch+h]
         if ww > w:
             if self.augment:
                 ucw = max(0, int((w/2.0)-center_x))
-                print("CENTERx",ucw)
             else:
                 ucw = max(0, int((ww/2.0)-(w/2.0)))
             image = image[:,ucw:ucw+w]
@@ -133,37 +131,25 @@ class UVPDataset(Dataset):
         class_name = self.img_classes[idx]
         label = self.img_labels[idx]
         #print(idx, filepath, class_name, label)
-        img_name = os.path.split(filepath)[1]
         image = imread(filepath)[:,:,0]
-        print(filepath, image.shape)
         # images have an annotation that gives the "1 mm" scale of the image
         hh,ww = image.shape
-        print('0', image.shape)
         # remove label at bottom
         bottom = 45 #np.argmin(image.sum(1))-10
         image = image[:hh-bottom,:]
         centerx,centery = self.get_center(image)
-        try:
-            print('1', image.shape)
-            print(centerx,centery)
-            image = self.crop_to_size(image, self.input_size, self.input_size, centery, centerx)
-            print('1.5', image.shape)
-            centerx,centery = self.get_center(image)
-            #if self.augment:
-            #     #image = self.rotate_image(image, max_angle=45, center=(centerx,centery))
-            #     # center is cols, rows
-            #     image = self.rotate_image(image, max_angle=45, center=(centery,centerx))
-            #     print('2', image.shape)
-            centerx,centery = self.get_center(image)
-            image = self.crop_to_size(image, self.input_size, self.input_size, centery, centerx)
-            print('3', image.shape)
-            image = self.add_padding(image, h=self.input_size, w=self.input_size)
-            print('4', image.shape)
-            image = Image.fromarray(image, mode='L')
-            image = self.transforms(image)
-        except Exception, e:
-            print(e)
-            embed()
+        image = self.crop_to_size(image, self.input_size, self.input_size, centery, centerx)
+        centerx,centery = self.get_center(image)
+        #if self.augment:
+        #     #image = self.rotate_image(image, max_angle=45, center=(centerx,centery))
+        #     # center is cols, rows
+        #     image = self.rotate_image(image, max_angle=45, center=(centery,centerx))
+        #     print('2', image.shape)
+        centerx,centery = self.get_center(image)
+        image = self.crop_to_size(image, self.input_size, self.input_size, centery, centerx)
+        image = self.add_padding(image, h=self.input_size, w=self.input_size)
+        image = Image.fromarray(image, mode='L')
+        image = self.transforms(image)
 
         return image[0][None], label, filepath, class_name, idx
 
@@ -196,5 +182,5 @@ if __name__ == '__main__':
             ax[1].set_title(label)
             plt.savefig(os.path.join(phase, img_name))
             plt.close()
-            
+
 

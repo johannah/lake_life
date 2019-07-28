@@ -10,6 +10,7 @@ import os
 import sys
 import copy
 from ecotaxa_dataloader import EcotaxaDataset
+from uvp_dataloader import UVPDataset
 from IPython import embed
 
 torch.manual_seed(44)
@@ -115,23 +116,23 @@ if __name__ == '__main__':
     #load_model = 'experiments/most_merged/checkpoints/ckptwt00120.pth'
     #load_model = 'experiments/most_merged/checkpoints/ckptwt_eval00245.pth'
     #load_model = 'experiments/most_merged/checkpoints/ckptwt00120.pth'
-    name = 'small'
+    name = 'uvp_big_small'
     datadir = './'
 
     write_dir = os.path.join('experiments', name, 'checkpoints')
     batch_size = 32
-    train_ds = EcotaxaDataset(csv_file=os.path.join('experiments', name, 'train.csv'),seed=34)
+    train_ds = UVPDataset(csv_file=os.path.join('experiments', name, 'train.csv'),seed=34)
     class_names = train_ds.classes
     class_counts = train_ds.class_counts
     class_weights = train_ds.weights
-    valid_ds = EcotaxaDataset(csv_file=os.path.join('experiments', name, 'valid.csv'), seed=334, classes=class_names, weights=class_weights)
+    valid_ds = UVPDataset(csv_file=os.path.join('experiments', name, 'valid.csv'), seed=334, classes=class_names, weights=class_weights)
     train_weighted_sampler = torch.utils.data.sampler.WeightedRandomSampler(torch.FloatTensor(train_ds.img_weights), len(train_ds), replacement=True)
     valid_weighted_sampler = torch.utils.data.sampler.WeightedRandomSampler(torch.FloatTensor(valid_ds.img_weights), len(valid_ds), replacement=True)
     train_dl = torch.utils.data.DataLoader(
             train_ds,
             batch_size=batch_size,
             sampler=train_weighted_sampler,
-            num_workers=2,
+            num_workers=4,
         )
     valid_dl = torch.utils.data.DataLoader(
             valid_ds,
@@ -143,12 +144,11 @@ if __name__ == '__main__':
 
     # Load the pretrained model from pytorch
     rmodel = torchvision.models.resnet50(pretrained=True)
-    num_epochs = 1000
     # Number of classes in the dataset
     num_classes = len(class_names)
 
     # Number of epochs to train for
-    num_epochs = 15
+    num_epochs = 1500
 
     # Flag for feature extracting. When False, we finetune the whole model,
     #   when True we only update the reshaped layer params
