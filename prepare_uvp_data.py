@@ -1,3 +1,5 @@
+import matplotlib
+matplotlib.use('Agg')
 import numpy as np
 import matplotlib.pyplot as plt
 import time
@@ -15,14 +17,18 @@ random_state = np.random.RandomState(394)
 images are color, but are the same across all channels (grayscale)
 bottom ~20 pixels in y axis are the scale measurement
 they all seem to have "1mm" at the bottom - are there any that are at a different zoom scale"""
-datadir = './data'
-data_labels = glob(os.path.join(datadir, '*', '*.tsv*'))
+
+datadir = './data/UVP_data_folder/'
+# each UVP folder has a subdir then another dir w/ tsv file
+data_labels = glob(os.path.join(datadir, '*', '*', '*.tsv*'))
 for i in range(len(data_labels)):
   print('loading', data_labels[i])
   fp = pandas.read_csv(data_labels[i], sep='\t')
   tsv_name = os.path.split(data_labels[i])[1]
+  fp.loc[:,'sub_exp_name'] = os.path.split(os.path.split(data_labels[i])[0])[1]
+  fp.loc[:,'exp_name'] = os.path.split(os.path.split(os.path.split(data_labels[i])[0])[0])[1]
   fp.loc[:,'tsv_name'] = tsv_name
-  fp.loc[:,'file_path'] = os.path.join(datadir, tsv_name[-8:-4])
+  fp.loc[:,'dir_name'] = data_labels[i]
   if not i:
     dd = fp
   else:
@@ -34,10 +40,10 @@ dd.loc[:,'num'] = range(dd.shape[0])
 # object_lat
 # object_lon
 # object_date
-# Cladocera, Copepoda, Rotifera, Holopediidae
+# Cladocera, Copepoda, Rotifera, Holopediida
 
 unique = list(set(dd['object_annotation_category']))
-dont_use = ['unknown', 'othertocheck', 'multiple<other']
+dont_use = ['unknown', 'othertocheck', 'multiple<other', '[t]']
 labels_to_use = []
 class_count = []
 for ztype in unique:
@@ -47,8 +53,47 @@ for ztype in unique:
       print(ztype, count)
       class_count.append(count)
 
+"""
+to check - 
+part<Copepoda
+part<other
+[t]
+not-living
 
-
+other<plastic
+multiple<Copepoda
+multiple<other
+"""
+#####################
+#('multiple<Copepoda', 55)
+#('Holopediidae', 11946)
+#('Chaoboridae', 1352)
+#('multiple<other', 292)
+#('seaweed', 81)
+#('Chironomidae', 17)
+#('volvoxlike', 1567)
+#('Cladocera', 35102)
+#('Arachnida', 29)
+#('Volvox', 38)
+#('living', 18017)
+#('[t]', 166755)
+#('not-living', 4)
+#('Rotifera', 5516)
+#('Unknown', 52)
+#('other<plastic', 11)
+#('other<living', 17509)
+#('part<other', 8)
+#('part<Copepoda', 238)
+#('Notonecta', 20)
+#('othertocheck', 44064)
+#('Copepoda', 25191)
+#('badfocus<artefact', 25635)
+#('fiber<detritus', 3)
+#('detritus', 1646)
+####################
+#####################
+# Zooscan
+####################
 # othertocheck 1873
 # Holopediidae 778
 # Chaoboridae 71
@@ -85,16 +130,15 @@ def write_data_file(dataframe, row_inds, data_type, base_dir):
     print('writing', fname)
     f = open(fname, 'w')
     for i in row_inds:
-        name = os.path.join(dataframe.loc[i,'file_path'], dataframe.loc[i,'img_file_name'])
         label = dataframe.loc[i, 'object_annotation_category']
+        file_path = os.path.join(datadir, dataframe.loc[i,'exp_name'], dataframe.loc[i, 'sub_exp_name'], dataframe.loc[i, 'img_file_name'])
         if class_count[labels_to_use.index(label)] < 1000 :
-            f.write("%s,%s\n"%(name,label))
-            #class_label = 'small_class'
-        #else:
-        #    class_label = label
-        #if label in ['badfocus<artefact', 'detritus', 'bubble']:
-        #    label = 'not_useful'
-        #f.write("%s,%s,%s\n"%(name,class_label,label))
+            class_label = 'small_class'
+        else:
+            class_label = label
+        if label in ['badfocus<artefact', 'detritus', 'bubble']:
+            label = 'not_useful'
+        f.write("%s,%s,%s\n"%(file_path,class_label,label))
     f.close()
 
 def make_train_test_split(df, exp_name):
@@ -119,6 +163,5 @@ def make_train_test_split(df, exp_name):
     write_data_file(df, valid_rows, 'valid',  overall_dir)
     write_data_file(df, train_rows, 'train',  overall_dir)
 
-#exp_name = 'most_merged'
-exp_name = 'small'
+exp_name = 'uvp_big_small'
 make_train_test_split(many_dd, exp_name)

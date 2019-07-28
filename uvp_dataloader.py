@@ -9,8 +9,10 @@ import sys
 from imageio import imread, imwrite
 from IPython import embed
 from skimage import transform
+from skimage.feature import blob_doh
+from copy import deepcopy
 
-class EcotaxaDataset(Dataset):
+class UVPDataset(Dataset):
     def __init__(self, csv_file, seed, classes='', weights='', augment=True):
         """
         Args:
@@ -40,7 +42,8 @@ class EcotaxaDataset(Dataset):
                 torchvision.transforms.RandomHorizontalFlip(),
                 transforms.RandomVerticalFlip(),
                 transforms.ToTensor(),
-                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+                #transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+                transforms.Normalize([0.485], [0.229])
                  ])
         else:
             self.transforms = torchvision.transforms.Compose([
@@ -80,25 +83,28 @@ class EcotaxaDataset(Dataset):
     def __len__(self):
         return len(self.img_filepaths)
 
-    def rotate_image(self, image, max_angle):
+    def rotate_image(self, image, max_angle, center):
         angle = self.random_state.randint(-max_angle, max_angle)
-        rotated = transform.rotate(image, angle, resize=True, center=None, order=1, mode='constant', cval=255, clip=True, preserve_range=True)
+        rotated = transform.rotate(image, angle, resize=True, center=center, order=1, mode='constant', cval=255, clip=True, preserve_range=True)
         return rotated
 
-    def crop_to_size(self, image, h, w):
+    def crop_to_size(self, in_image, h, w, center_y, center_x):
         # if image is larger than (h,w) randomly crop it
-        hh,ww,cc = image.shape
+        image = deepcopy(in_image)
+        hh,ww = image.shape
         if hh>h:
             if self.augment:
-                uch = self.random_state.randint(0,hh-h)
+                uch = max(0, int((h/2.0)-center_y))
+                print("CENTERY",uch)
             else:
-                uch = int((hh/2.0)-(h/2.0))
+                uch = max(0, int((hh/2.0)-(h/2.0)))
             image = image[uch:uch+h]
         if ww > w:
             if self.augment:
-                ucw = self.random_state.randint(0,ww-w)
+                ucw = max(0, int((w/2.0)-center_x))
+                print("CENTERx",ucw)
             else:
-                ucw = int((ww/2.0)-(w/2.0))
+                ucw = max(0, int((ww/2.0)-(w/2.0)))
             image = image[:,ucw:ucw+w]
         return image
 
@@ -106,31 +112,59 @@ class EcotaxaDataset(Dataset):
         # blank space should be ones
         # assumes image is same size or smaller than padding size
         assert(image.max() == 255.0)
-        hh,ww,cc = image.shape
+        hh,ww = image.shape
         uch, ucw = 0,0
         if hh<h:
           uch = self.random_state.randint(0,h-hh)
         if ww<w:
           ucw = self.random_state.randint(0,w-ww)
-        canvas = np.ones((h,w,cc),dtype=np.uint8)*255
+        canvas = np.ones((h,w),dtype=np.uint8)*255
         canvas[uch:uch+hh,ucw:ucw+ww] = image
         return canvas
+
+    def get_center(self, image):
+        centerx = np.median(np.where(image<255)[0])
+        centery = np.median(np.where(image<255)[1])
+        return centerx, centery
+
 
     def __getitem__(self, idx):
         filepath = self.img_filepaths[idx]
         class_name = self.img_classes[idx]
         label = self.img_labels[idx]
         #print(idx, filepath, class_name, label)
-        image = imread(filepath)
+        img_name = os.path.split(filepath)[1]
+        image = imread(filepath)[:,:,0]
+        print(filepath, image.shape)
         # images have an annotation that gives the "1 mm" scale of the image
-        hh,ww,c = image.shape
-        image = image[:hh-20,:]
-        if self.augment:
-             image = self.rotate_image(image, max_angle=45)
-        image = self.crop_to_size(image, h=self.input_size, w=self.input_size)
-        image = self.add_padding(image, h=self.input_size, w=self.input_size)
-        image = Image.fromarray(image, mode='RGB')
-        image = self.transforms(image)
+        hh,ww = image.shape
+        print('0', image.shape)
+        # remove label at bottom
+        bottom = 45 #np.argmin(image.sum(1))-10
+        image = image[:hh-bottom,:]
+        centerx,centery = self.get_center(image)
+        try:
+            print('1', image.shape)
+            print(centerx,centery)
+            image = self.crop_to_size(image, self.input_size, self.input_size, centery, centerx)
+            print('1.5', image.shape)
+            centerx,centery = self.get_center(image)
+            #if self.augment:
+            #     #image = self.rotate_image(image, max_angle=45, center=(centerx,centery))
+            #     # center is cols, rows
+            #     image = self.rotate_image(image, max_angle=45, center=(centery,centerx))
+            #     print('2', image.shape)
+            centerx,centery = self.get_center(image)
+            image = self.crop_to_size(image, self.input_size, self.input_size, centery, centerx)
+            print('3', image.shape)
+            image = self.add_padding(image, h=self.input_size, w=self.input_size)
+            print('4', image.shape)
+            image = Image.fromarray(image, mode='L')
+            image = self.transforms(image)
+        except Exception, e:
+            print(e)
+            embed()
+
         return image[0][None], label, filepath, class_name, idx
 
 if __name__ == '__main__':
@@ -138,8 +172,7 @@ if __name__ == '__main__':
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     bdir = 'experiments/uvp_big_small'
-    train_ds = EcotaxaDataset(csv_file=os.path.join(bdir,'train.csv'), seed=34)
-    print("train_ds", len(train_ds))
+    train_ds = UVPDataset(csv_file=os.path.join(bdir,'train.csv'), seed=34)
     #valid_ds = EcotaxaDataset(csv_file='valid.csv', seed=334, classes=class_names, weights=class_weights)
     class_names = train_ds.classes
     class_weights = train_ds.weights
@@ -149,14 +182,19 @@ if __name__ == '__main__':
     for phase in ds.keys():
         if not os.path.exists(phase):
             os.makedirs(phase)
-        for i in range(len(ds[phase])):
-            inputs, labels, img_path, class_name, idx = ds[phase][i]
+        all_inputs = []
+        #for i in range(len(ds[phase])):
+        for i in range(1000):
+            inputs, label, img_path, class_name, idx = ds[phase][i]
+            all_inputs.append(inputs[0].numpy())
             f,ax = plt.subplots(1,2)
             ax[0].imshow(inputs[0].numpy())
             imo = imread(img_path)
             ax[1].imshow(imo[:,:,0])
             img_name = os.path.split(img_path)[1]
-            plt.title(img_path)
+            ax[0].set_title(class_names[label])
+            ax[1].set_title(label)
             plt.savefig(os.path.join(phase, img_name))
             plt.close()
+            
 
