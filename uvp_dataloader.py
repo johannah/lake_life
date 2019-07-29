@@ -14,7 +14,7 @@ from skimage.feature import blob_doh
 from copy import deepcopy
 
 class UVPDataset(Dataset):
-    def __init__(self, csv_file, seed, classes='', weights='', augment=True, run_mean=0.9981, run_std=.0160):
+    def __init__(self, csv_file, seed, classes='', weights='', augment=True, run_mean=.485, run_std=.229):
         """
         Args:
             csv_file (string): Path to the csv file with image paths and annotations.
@@ -71,20 +71,20 @@ class UVPDataset(Dataset):
         func_transforms.append(transforms.Normalize([run_mean], [run_std]))
         self.transforms = torchvision.transforms.Compose(func_transforms)
 
-    def find_mean_std(self):
-        limit = int(0.15*self.__len__())
-        choices = self.random_state.choice(np.arange(self.__len__()), limit)
-        # hmm since my classes aren't balanced - this might be bad
-        run_mean = 0
-        run_std = 0
-        for c in choices:
-            image,_,_,_,_ = self.__getitem__(c)
-            run_mean += image.mean()
-            run_std += image.std()
-        run_mean/=float(limit)
-        run_std/=float(limit)
-        print('found mean/std', run_mean, run_std)
-        return run_mean, run_std
+    #def find_mean_std(self):
+    #    limit = int(0.15*self.__len__())
+    #    choices = self.random_state.choice(np.arange(self.__len__()), limit)
+    #    # hmm since my classes aren't balanced - this might be bad
+    #    run_mean = 0
+    #    run_std = 0
+    #    for c in choices:
+    #        image,_,_,_,_ = self.__getitem__(c)
+    #        run_mean += image.mean()
+    #        run_std += image.std()
+    #    run_mean/=float(limit)
+    #    run_std/=float(limit)
+    #    print('found mean/std', run_mean, run_std)
+    #    return run_mean, run_std
 
     def __len__(self):
         return len(self.img_filepaths)

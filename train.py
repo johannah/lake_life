@@ -123,7 +123,7 @@ if __name__ == '__main__':
     datadir = './'
 
     write_dir = os.path.join('experiments', name, 'checkpoints')
-    batch_size = 84
+    batch_size = 32
     train_ds = UVPDataset(csv_file=os.path.join('experiments', name, 'train.csv'),seed=34)
     class_names = train_ds.classes
     class_counts = train_ds.class_counts
@@ -177,11 +177,11 @@ if __name__ == '__main__':
         for name,param in rmodel.named_parameters():
             if param.requires_grad == True:
                 params_to_update.append(param)
-                print("\t",name)
+                print('update', "\t",name)
     else:
         for name,param in rmodel.named_parameters():
             if param.requires_grad == True:
-                print("\t",name)
+                print('do not update', "\t",name)
 
     # Observe that all parameters are being optimized
     optimizer = optim.Adam(params_to_update, lr=1e-4)

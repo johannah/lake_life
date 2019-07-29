@@ -43,7 +43,9 @@ dd.loc[:,'num'] = range(dd.shape[0])
 # Cladocera, Copepoda, Rotifera, Holopediida
 
 unique = list(set(dd['object_annotation_category']))
-dont_use = ['unknown', 'othertocheck', 'multiple<other', '[t]', 'other<living']
+dont_use = ['unknown', 'othertocheck', 'multiple<other', '[t]',
+            'other<living', 'living', 'not-living', 'other<plastic',
+            'fiber<detritus', 'part<other']
 labels_to_use = []
 class_count = []
 for ztype in unique:
@@ -132,7 +134,7 @@ def write_data_file(dataframe, row_inds, data_type, base_dir):
     for i in row_inds:
         label = dataframe.loc[i, 'object_annotation_category']
         file_path = os.path.join(datadir, dataframe.loc[i,'exp_name'], dataframe.loc[i, 'sub_exp_name'], dataframe.loc[i, 'img_file_name'])
-        if class_count[labels_to_use.index(label)] < 1000 :
+        if class_count[labels_to_use.index(label)] < 5000 :
             class_label = 'small_class'
         else:
             class_label = label
