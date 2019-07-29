@@ -189,7 +189,7 @@ if __name__ == '__main__':
     # Setup the loss fxn
     criterion = nn.CrossEntropyLoss()
     #criterion = nn.CrossEntropyLoss(weight=torch.Tensor(class_weights).to(device))
-    num_epochs_bt_saves = 2
+    num_epochs_bt_saves = 1
 
     if not os.path.exists(write_dir):
         os.makedirs(write_dir)

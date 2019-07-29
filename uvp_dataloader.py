@@ -13,8 +13,10 @@ from skimage.feature import blob_doh
 from copy import deepcopy
 
 class UVPDataset(Dataset):
-    def __init__(self, csv_file, seed, classes='', weights='', augment=True, run_mean=0.9981, run_std=.0160):
+    def __init__(self, csv_file, seed, classes='', weights='', augment=True,
+                 run_mean=.0019, run_std=.0154):
         """
+        found mean/std tensor(0.0019) tensor(0.0154)
         Args:
             csv_file (string): Path to the csv file with image paths and annotations.
 
@@ -38,9 +40,11 @@ class UVPDataset(Dataset):
         # TODO - find actual mean/std
 
         func_transforms = [
-            torchvision.transforms.ColorJitter(hue=.1, saturation=.1,
-                                               brightness=.1, contrast=.1),
-            torchvision.transforms.RandomRotation(45),
+            torchvision.transforms.ColorJitter(hue=.4, saturation=.4,
+                                               brightness=.4, contrast=.4),
+            # random rotation pads with zeros
+            torchvision.transforms.RandomRotation(45, expand=True),
+            transforms.CenterCrop(self.input_size),
             torchvision.transforms.RandomHorizontalFlip(),
             transforms.RandomVerticalFlip(),
             transforms.ToTensor(),
@@ -99,10 +103,10 @@ class UVPDataset(Dataset):
         # prevent 0 weight on any by adding .2
         self.weights = 1.0/self.class_counts
 
-    #def rotate_image(self, image, max_angle, center):
-    #    angle = self.random_state.randint(-max_angle, max_angle)
-    #    rotated = transform.rotate(image, angle, resize=True, center=center, order=1, mode='constant', cval=255, clip=True, preserve_range=True)
-    #    return rotated
+    def rotate_image(self, image, max_angle, center):
+        angle = self.random_state.randint(-max_angle, max_angle)
+        rotated = transform.rotate(image, angle, resize=True, center=center, order=1, mode='constant', cval=255, clip=True, preserve_range=True)
+        return rotated
 
     def crop_to_size(self, in_image, h, w, center_y, center_x):
         # if image is larger than (h,w) randomly crop it
@@ -156,9 +160,8 @@ class UVPDataset(Dataset):
             image = image[:hh-bottom,:]
             centerx,centery = self.get_center(image)
             image = self.crop_to_size(image, self.input_size, self.input_size, centery, centerx)
-            # torchvision.transforms.Pad(padding, fill=255,
-                                         # padding_mode='constant')
             image = self.add_padding(image, h=self.input_size, w=self.input_size)
+            image = 255-image
             image = Image.fromarray(image, mode='L')
             image = self.transforms(image)
             image = image[0][None]
