@@ -18,6 +18,7 @@ from imageio import imread
 from sklearn.metrics import confusion_matrix
 from sklearn.utils.multiclass import unique_labels
 from ecotaxa_dataloader import EcotaxaDataset
+from uvp_dataloader import UVPDataset
 np.set_printoptions(precision=2)
 
 def plot_confusion_matrix(y_true, y_pred, classes,
@@ -119,30 +120,33 @@ def evaluate_model(model, dataloaders, basename=''):
                  y_pred.extend(lpred)
 
                  ## keep track of everything we got wrong
-                 wrong_inds = [ind for ind,(lp,l) in enumerate(zip(lpred, llist)) if not lp==l]
-                 if True:
-                 #if cnt < 5000:
-                     for wi in wrong_inds:
-                         name = os.path.join(error_dir, 'C%05d_%02d'%(cnt,wi) + 'D%05d'%didx[wi] + os.path.split(img_path[wi])[1])
-                         plot_error(ninputs[wi,0], img_path[wi], llist[wi], lpred[wi], name, img_path[wi])
-                         error_inputs.append(ninputs[wi,0])
-                         error_filenames.append(img_path[wi])
-                         error_labels.append(llist[wi])
-                         error_preds.append(lpred[wi])
-                         #print(llist[wi], lpred[wi], outputs[wi])
-                 else:
-                     break
+                 #wrong_inds = [ind for ind,(lp,l) in enumerate(zip(lpred, llist)) if not lp==l]
+                 #if cnt < 500:
+                 ##if False:
+                 #    for wi in wrong_inds:
+                 #        name = os.path.join(error_dir, 'C%05d_%02d'%(cnt,wi) + 'D%05d'%didx[wi] + os.path.split(img_path[wi])[1])
+                 #        plot_error(ninputs[wi,0], img_path[wi], llist[wi], lpred[wi], name, img_path[wi])
+                 #        error_inputs.append(ninputs[wi,0])
+                 #        error_filenames.append(img_path[wi])
+                 #        error_labels.append(llist[wi])
+                 #        error_preds.append(lpred[wi])
+                 #        #print(llist[wi], lpred[wi], outputs[wi])
+                 #else:
+                 #    break
                  cnt+=inputs.shape[0]
+                 print(cnt)
+                 if cnt > 10000:
+                     break
 
-            # Plot non-normalized confusion matrix
-            plot_confusion_matrix(y_true, y_pred, classes=class_names,
-                                  title='Confusion matrix, without normalization',
-                                  filename=basename+'_'+phase+'_'+'unnormalized_confusion.png')
+        # Plot non-normalized confusion matrix
+        plot_confusion_matrix(y_true, y_pred, classes=class_names,
+                              title='Confusion matrix, without normalization',
+                              filename=basename+'_'+phase+'_'+'unnormalized_confusion.png')
 
-            # Plot normalized confusion matrix
-            plot_confusion_matrix(y_true, y_pred, classes=class_names, normalize=True,
-                                  title='Normalized confusion matrix',
-                                  filename=basename+'_'+phase+'_'+'normalized_confusion.png')
+        # Plot normalized confusion matrix
+        plot_confusion_matrix(y_true, y_pred, classes=class_names, normalize=True,
+                              title='Normalized confusion matrix',
+                              filename=basename+'_'+phase+'_'+'normalized_confusion.png')
 
 
 def load_latest_checkpoint(loaddir='experiment_name', search='*.pth'):
@@ -155,15 +159,25 @@ def load_latest_checkpoint(loaddir='experiment_name', search='*.pth'):
     return ckpt, torch.load(ckpt)
 
 def plot_history(history_dict, filename):
+    try:
+        # old code saved as pt
+        history_dict['valid'] = np.array([x.cpu().numpy() for x in history_dict['valid']])
+        history_dict['train'] = np.array([x.cpu().numpy() for x in history_dict['train']])
+    except:
+        pass
     plt.figure()
+    _ind1 = np.argmax(history_dict['valid'])
+    _ind2 = np.argmin(history_dict['valid'])
+    rs = [history_dict['valid'][_ind1], history_dict['valid'][_ind2]]
     plt.plot(history_dict['train'], label='train')
     plt.plot(history_dict['valid'], label='valid')
+    plt.scatter([_ind1, _ind2], rs, marker='x', s=30)
     plt.legend()
     plt.savefig(filename)
     plt.close()
 
 if __name__ == '__main__':
-    exp_name = 'small'
+    exp_name = 'uvp_big_small_v2_noliving'
     exp_path = os.path.join('experiments', exp_name)
     print(sys.argv)
     if len(sys.argv)>1:
@@ -176,10 +190,10 @@ if __name__ == '__main__':
     plot_history(ckpt_dict['loss'], bname+'_loss.png')
     plot_history(ckpt_dict['accuracy'], bname+'_accuracy.png')
     batch_size = 32
-    train_ds = EcotaxaDataset(csv_file=os.path.join(exp_path, 'train.csv'), seed=34, augment=False)
+    train_ds = UVPDataset(csv_file=os.path.join(exp_path, 'train.csv'), seed=34, augment=False)
     class_names = train_ds.classes
     class_weights = train_ds.weights
-    valid_ds = EcotaxaDataset(csv_file=os.path.join(exp_path, 'valid.csv'), seed=334, classes=class_names, weights=class_weights, augment=False)
+    valid_ds = UVPDataset(csv_file=os.path.join(exp_path, 'valid.csv'), seed=334, classes=class_names, weights=class_weights, augment=False)
     train_dl = torch.utils.data.DataLoader(
             train_ds,
             batch_size=batch_size,
@@ -194,7 +208,6 @@ if __name__ == '__main__':
 
     # Load the pretrained model from pytorch
     rmodel = torchvision.models.resnet50(pretrained=True)
-    num_epochs = 1000
     # Number of classes in the dataset
     num_classes = len(class_names)
 

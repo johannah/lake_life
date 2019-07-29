@@ -43,7 +43,7 @@ dd.loc[:,'num'] = range(dd.shape[0])
 # Cladocera, Copepoda, Rotifera, Holopediida
 
 unique = list(set(dd['object_annotation_category']))
-dont_use = ['unknown', 'othertocheck', 'multiple<other', '[t]']
+dont_use = ['unknown', 'othertocheck', 'multiple<other', '[t]', 'other<living']
 labels_to_use = []
 class_count = []
 for ztype in unique:
@@ -54,7 +54,7 @@ for ztype in unique:
       class_count.append(count)
 
 """
-to check - 
+to check -
 part<Copepoda
 part<other
 [t]
@@ -163,5 +163,5 @@ def make_train_test_split(df, exp_name):
     write_data_file(df, valid_rows, 'valid',  overall_dir)
     write_data_file(df, train_rows, 'train',  overall_dir)
 
-exp_name = 'uvp_big_small'
+exp_name = 'uvp_big_small_v2_noliving'
 make_train_test_split(many_dd, exp_name)

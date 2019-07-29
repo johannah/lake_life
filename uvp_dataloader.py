@@ -13,7 +13,7 @@ from skimage.feature import blob_doh
 from copy import deepcopy
 
 class UVPDataset(Dataset):
-    def __init__(self, csv_file, seed, classes='', weights='', augment=True):
+    def __init__(self, csv_file, seed, classes='', weights='', augment=True, run_mean=0.9981, run_std=.0160):
         """
         Args:
             csv_file (string): Path to the csv file with image paths and annotations.
@@ -34,22 +34,18 @@ class UVPDataset(Dataset):
             self.img_filepaths.append(ll[0])
             self.img_classes.append(ll[1])
             #self.refined_img_classes.append(ll[2])
-
         self.augment = augment
-        if self.augment:
-            self.transforms = torchvision.transforms.Compose([
-                torchvision.transforms.ColorJitter(hue=.05, saturation=.05),
-                torchvision.transforms.RandomHorizontalFlip(),
-                transforms.RandomVerticalFlip(),
-                transforms.ToTensor(),
-                #transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-                transforms.Normalize([0.485], [0.229])
-                 ])
-        else:
-            self.transforms = torchvision.transforms.Compose([
-                transforms.ToTensor(),
-                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-                 ])
+        # TODO - find actual mean/std
+
+        func_transforms = [
+            torchvision.transforms.ColorJitter(hue=.1, saturation=.1,
+                                               brightness=.1, contrast=.1),
+            torchvision.transforms.RandomRotation(45),
+            torchvision.transforms.RandomHorizontalFlip(),
+            transforms.RandomVerticalFlip(),
+            transforms.ToTensor(),
+             ]
+        self.transforms = torchvision.transforms.Compose(func_transforms)
 
         self.indexes = np.arange(len(self.img_filepaths))
         if classes == '':
@@ -70,6 +66,29 @@ class UVPDataset(Dataset):
         for cn, cc, cw in zip(self.classes, self.class_counts, self.weights):
             print('class:%s counts:%s weight:%.03f'%(cn, cc, cw))
 
+        if run_mean is None:
+             run_mean, run_std = self.find_mean_std()
+        func_transforms.append(transforms.Normalize([run_mean], [run_std]))
+        self.transforms = torchvision.transforms.Compose(func_transforms)
+
+    def find_mean_std(self):
+        limit = int(0.15*self.__len__())
+        choices = self.random_state.choice(np.arange(self.__len__()), limit)
+        # hmm since my classes aren't balanced - this might be bad
+        run_mean = 0
+        run_std = 0
+        for c in choices:
+            image,_,_,_,_ = self.__getitem__(c)
+            run_mean += image.mean()
+            run_std += image.std()
+        run_mean/=float(limit)
+        run_std/=float(limit)
+        print('found mean/std', run_mean, run_std)
+        return run_mean, run_std
+
+    def __len__(self):
+        return len(self.img_filepaths)
+
     def find_class_counts(self):
         class_counts = []
         for c in self.classes:
@@ -80,13 +99,10 @@ class UVPDataset(Dataset):
         # prevent 0 weight on any by adding .2
         self.weights = 1.0/self.class_counts
 
-    def __len__(self):
-        return len(self.img_filepaths)
-
-    def rotate_image(self, image, max_angle, center):
-        angle = self.random_state.randint(-max_angle, max_angle)
-        rotated = transform.rotate(image, angle, resize=True, center=center, order=1, mode='constant', cval=255, clip=True, preserve_range=True)
-        return rotated
+    #def rotate_image(self, image, max_angle, center):
+    #    angle = self.random_state.randint(-max_angle, max_angle)
+    #    rotated = transform.rotate(image, angle, resize=True, center=center, order=1, mode='constant', cval=255, clip=True, preserve_range=True)
+    #    return rotated
 
     def crop_to_size(self, in_image, h, w, center_y, center_x):
         # if image is larger than (h,w) randomly crop it
@@ -140,14 +156,8 @@ class UVPDataset(Dataset):
             image = image[:hh-bottom,:]
             centerx,centery = self.get_center(image)
             image = self.crop_to_size(image, self.input_size, self.input_size, centery, centerx)
-            centerx,centery = self.get_center(image)
-            #if self.augment:
-            #     #image = self.rotate_image(image, max_angle=45, center=(centerx,centery))
-            #     # center is cols, rows
-            #     image = self.rotate_image(image, max_angle=45, center=(centery,centerx))
-            #     print('2', image.shape)
-            centerx,centery = self.get_center(image)
-            image = self.crop_to_size(image, self.input_size, self.input_size, centery, centerx)
+            # torchvision.transforms.Pad(padding, fill=255,
+                                         # padding_mode='constant')
             image = self.add_padding(image, h=self.input_size, w=self.input_size)
             image = Image.fromarray(image, mode='L')
             image = self.transforms(image)
