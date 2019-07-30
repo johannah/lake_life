@@ -1,7 +1,6 @@
 from torch.utils.data import Dataset, DataLoader
 import PIL
 from PIL import Image
-from PIL import ImageFilter
 import numpy as np
 import torchvision
 from torchvision import datasets, models, transforms
@@ -14,7 +13,7 @@ from skimage.feature import blob_doh
 from copy import deepcopy
 
 class UVPDataset(Dataset):
-    def __init__(self, csv_file, seed, classes='', weights='', augment=True, run_mean=.485, run_std=.229):
+    def __init__(self, csv_file, seed, classes='', weights='', augment=True, run_mean=0.9981, run_std=.0160):
         """
         Args:
             csv_file (string): Path to the csv file with image paths and annotations.
@@ -25,7 +24,7 @@ class UVPDataset(Dataset):
         self.img_refined_classes = []
         self.random_state = np.random.RandomState(seed)
         # load file data
-        self.input_size = 256
+        self.input_size = 224
         print('loading csv:%s'%csv_file)
         assert os.path.exists(csv_file); # csv file given doesnt exist
         f = open(csv_file, 'r')
@@ -41,6 +40,8 @@ class UVPDataset(Dataset):
         func_transforms = [
             torchvision.transforms.ColorJitter(hue=.1, saturation=.1,
                                                brightness=.1, contrast=.1),
+            # random rotation pads with zeros
+            #torchvision.transforms.RandomRotation(45, expand=True),
             torchvision.transforms.RandomHorizontalFlip(),
             transforms.RandomVerticalFlip(),
             transforms.ToTensor(),
@@ -71,20 +72,20 @@ class UVPDataset(Dataset):
         func_transforms.append(transforms.Normalize([run_mean], [run_std]))
         self.transforms = torchvision.transforms.Compose(func_transforms)
 
-    #def find_mean_std(self):
-    #    limit = int(0.15*self.__len__())
-    #    choices = self.random_state.choice(np.arange(self.__len__()), limit)
-    #    # hmm since my classes aren't balanced - this might be bad
-    #    run_mean = 0
-    #    run_std = 0
-    #    for c in choices:
-    #        image,_,_,_,_ = self.__getitem__(c)
-    #        run_mean += image.mean()
-    #        run_std += image.std()
-    #    run_mean/=float(limit)
-    #    run_std/=float(limit)
-    #    print('found mean/std', run_mean, run_std)
-    #    return run_mean, run_std
+    def find_mean_std(self):
+        limit = int(0.15*self.__len__())
+        choices = self.random_state.choice(np.arange(self.__len__()), limit)
+        # hmm since my classes aren't balanced - this might be bad
+        run_mean = 0
+        run_std = 0
+        for c in choices:
+            image,_,_,_,_ = self.__getitem__(c)
+            run_mean += image.mean()
+            run_std += image.std()
+        run_mean/=float(limit)
+        run_std/=float(limit)
+        print('found mean/std', run_mean, run_std)
+        return run_mean, run_std
 
     def __len__(self):
         return len(self.img_filepaths)
@@ -99,9 +100,9 @@ class UVPDataset(Dataset):
         # prevent 0 weight on any by adding .2
         self.weights = 1.0/self.class_counts
 
-    def rotate_image(self, image, max_angle):
+    def rotate_image(self, image, max_angle, center):
         angle = self.random_state.randint(-max_angle, max_angle)
-        rotated = transform.rotate(image, angle, resize=True, order=1, mode='constant', cval=255, clip=True, preserve_range=True)
+        rotated = transform.rotate(image, angle, resize=True, center=center, order=1, mode='constant', cval=255, clip=True, preserve_range=True)
         return rotated
 
     def crop_to_size(self, in_image, h, w, center_y, center_x):
@@ -125,19 +126,15 @@ class UVPDataset(Dataset):
     def add_padding(self, image, h, w):
         # blank space should be ones
         # assumes image is same size or smaller than padding size
-        try:
-            assert(image.max() == 255.0)
-            hh,ww = image.shape
-            uch, ucw = 0,0
-            if hh<h:
-              uch = self.random_state.randint(0,h-hh)
-            if ww<w:
-              ucw = self.random_state.randint(0,w-ww)
-            canvas = np.ones((h,w),dtype=np.uint8)*255
-            canvas[uch:uch+hh,ucw:ucw+ww] = image
-        except Exception as e:
-            print(e)
-            embed()
+        assert(image.max() == 255.0)
+        hh,ww = image.shape
+        uch, ucw = 0,0
+        if hh<h:
+          uch = self.random_state.randint(0,h-hh)
+        if ww<w:
+          ucw = self.random_state.randint(0,w-ww)
+        canvas = np.ones((h,w),dtype=np.uint8)*255
+        canvas[uch:uch+hh,ucw:ucw+ww] = image
         return canvas
 
     def get_center(self, image):
@@ -160,20 +157,13 @@ class UVPDataset(Dataset):
             image = image[:hh-bottom,:]
             centerx,centery = self.get_center(image)
             image = self.crop_to_size(image, self.input_size, self.input_size, centery, centerx)
-            image = self.rotate_image(image, max_angle=45)
-            centerx,centery = self.get_center(image)
-            image = self.crop_to_size(image, self.input_size, self.input_size, centery, centerx)
             image = self.add_padding(image, h=self.input_size, w=self.input_size)
-            image = self.crop_to_size(image, self.input_size, self.input_size, centery, centerx)
             image = Image.fromarray(image, mode='L')
-            if self.random_state.rand()<.5:
-                image = image.filter(ImageFilter.BLUR)
             image = self.transforms(image)
             image = image[0][None]
         except:
             print("COULD NOT LOAD DATA FILE", idx)
             print(filepath)
-            print('f', image.shape)
             # tmp hack - actually that image seems messed up`:w
             # TODO - figureout how to feed failed image to dataloader
             # some uvp images wont load

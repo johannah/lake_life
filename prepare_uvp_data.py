@@ -45,7 +45,8 @@ dd.loc[:,'num'] = range(dd.shape[0])
 unique = list(set(dd['object_annotation_category']))
 dont_use = ['unknown', 'othertocheck', 'multiple<other', '[t]',
             'other<living', 'living', 'not-living', 'other<plastic',
-            'fiber<detritus', 'part<other']
+            'fiber<detritus', 'part<other',
+            'other<living', 'living', 'part<other','part<copepoda' ,'fiber<detritus' ]
 labels_to_use = []
 class_count = []
 for ztype in unique:
@@ -57,8 +58,8 @@ for ztype in unique:
 
 """
 to check -
-part<Copepoda
-part<other
+ the variants of living are not really classes
+what is part<copepoda look like
 [t]
 not-living
 

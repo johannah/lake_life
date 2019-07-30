@@ -119,10 +119,10 @@ def evaluate_model(model, dataloaders, basename=''):
                  y_true.extend(llist)
                  y_pred.extend(lpred)
 
-                 ## keep track of everything we got wrong
+                 ### keep track of everything we got wrong
                  #wrong_inds = [ind for ind,(lp,l) in enumerate(zip(lpred, llist)) if not lp==l]
-                 #if cnt < 500:
                  ##if False:
+                 #if cnt < 200:
                  #    for wi in wrong_inds:
                  #        name = os.path.join(error_dir, 'C%05d_%02d'%(cnt,wi) + 'D%05d'%didx[wi] + os.path.split(img_path[wi])[1])
                  #        plot_error(ninputs[wi,0], img_path[wi], llist[wi], lpred[wi], name, img_path[wi])
@@ -131,11 +131,9 @@ def evaluate_model(model, dataloaders, basename=''):
                  #        error_labels.append(llist[wi])
                  #        error_preds.append(lpred[wi])
                  #        #print(llist[wi], lpred[wi], outputs[wi])
-                 #else:
-                 #    break
                  cnt+=inputs.shape[0]
                  print(cnt)
-                 if cnt > 10000:
+                 if cnt > 5000:
                      break
 
         # Plot non-normalized confusion matrix

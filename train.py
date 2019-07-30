@@ -119,11 +119,11 @@ if __name__ == '__main__':
     """
      without rotate - seems to overfit badly
     """
-    name = 'uvp_big_small_v2_noliving'
+    name = 'uvp_big_small_noliving_norotate'
     datadir = './'
 
     write_dir = os.path.join('experiments', name, 'checkpoints')
-    batch_size = 32
+    batch_size = 64
     train_ds = UVPDataset(csv_file=os.path.join('experiments', name, 'train.csv'),seed=34)
     class_names = train_ds.classes
     class_counts = train_ds.class_counts
@@ -189,7 +189,7 @@ if __name__ == '__main__':
     # Setup the loss fxn
     criterion = nn.CrossEntropyLoss()
     #criterion = nn.CrossEntropyLoss(weight=torch.Tensor(class_weights).to(device))
-    num_epochs_bt_saves = 2
+    num_epochs_bt_saves = 1
 
     if not os.path.exists(write_dir):
         os.makedirs(write_dir)
