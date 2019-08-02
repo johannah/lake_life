@@ -176,7 +176,7 @@ def plot_history(history_dict, filename):
     plt.close()
 
 if __name__ == '__main__':
-    exp_name = 'uvp_big_1000small_noliving_norotate'
+    exp_name = 'uvp_big_1000small_noliving_norotate_other'
     exp_path = os.path.join('experiments', exp_name)
     print(sys.argv)
     if len(sys.argv)>1:
