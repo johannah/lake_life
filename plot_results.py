@@ -133,7 +133,7 @@ def evaluate_model(model, dataloaders, basename=''):
                  #        #print(llist[wi], lpred[wi], outputs[wi])
                  cnt+=inputs.shape[0]
                  print(cnt)
-                 if cnt > 5000:
+                 if cnt > 1000:
                      break
 
         # Plot non-normalized confusion matrix
