@@ -43,10 +43,11 @@ dd.loc[:,'num'] = range(dd.shape[0])
 # Cladocera, Copepoda, Rotifera, Holopediida
 
 unique = list(set(dd['object_annotation_category']))
-dont_use = ['unknown', 'othertocheck', 'multiple<other', '[t]',
-            'other<living', 'living', 'not-living', 'other<plastic',
+dont_use = ['unknown', '[t]',
+            'living', 'not-living',
             'part<other',
-            'other<living', 'living', 'part<other','part<copepoda' ,'fiber<detritus' ]
+            'part<copepoda']
+
 labels_to_use = []
 class_count = []
 for ztype in unique:
@@ -56,6 +57,11 @@ for ztype in unique:
       print(ztype, count)
       class_count.append(count)
 
+
+# Riwan says all but the last three are important
+individual_labels = ['cladocera', 'copepoda', 'holopediidae',
+                      'badfocus<artefact', 'othertocheck',
+                      'chaoboridae', 'detritus', 'volvoxlike', 'rotifera']
 """
 to check -
  the variants of living are not really classes
@@ -67,32 +73,43 @@ other<plastic
 multiple<Copepoda
 multiple<other
 """
+# most important
+# cladocera
+# copepoda
+# cxxx
+# holopedidae
+# other to check is a combo of cladocera and copepoda
+# Some copepoda are big, am I cutting them off?
+# multiple class doesn't matter- doesnt matter
+# in the horizontal transects, seaweed is very big
+# plot ('part<Copepoda', 238)
 #####################
-#('multiple<Copepoda', 55)
-#('Holopediidae', 11946)
-#('Chaoboridae', 1352)
-#('multiple<other', 292)
-#('seaweed', 81)
-#('Chironomidae', 17)
-#('volvoxlike', 1567)
-#('Cladocera', 35102)
-#('Arachnida', 29)
-#('Volvox', 38)
-#('living', 18017)
 #('[t]', 166755)
+#('living', 18017)
 #('not-living', 4)
-#('Rotifera', 5516)
-#('Unknown', 52)
-#('other<plastic', 11)
 #('other<living', 17509)
-#('part<other', 8)
-#('part<Copepoda', 238)
-#('Notonecta', 20)
-#('othertocheck', 44064)
-#('Copepoda', 25191)
+
 #('badfocus<artefact', 25635)
-#('fiber<detritus', 3)
+#('othertocheck', 44064)
+#('Chaoboridae', 1352)
+
 #('detritus', 1646)
+#('volvoxlike', 1567)
+#('Rotifera', 5516)
+
+#('Notonecta', 20)
+#('Arachnida', 29)
+#('Chironomidae', 17)
+#('Volvox', 38)
+#('seaweed', 81)
+#('part<other', 8)
+#('Unknown', 52)
+#('part<Copepoda', 238)
+#('fiber<detritus', 3)
+#('multiple<Copepoda', 55) -- > how to handle
+#('multiple<other', 292) ---> how to handle
+#('other<plastic', 11)
+
 ####################
 #####################
 # Zooscan
@@ -134,14 +151,13 @@ def write_data_file(dataframe, row_inds, data_type, base_dir):
     print('writing', fname)
     f = open(fname, 'w')
     for i in row_inds:
-        label = dataframe.loc[i, 'object_annotation_category']
+        label = dataframe.loc[i, 'object_annotation_category'].lower()
         file_path = os.path.join(datadir, dataframe.loc[i,'exp_name'], dataframe.loc[i, 'sub_exp_name'], dataframe.loc[i, 'img_file_name'])
-        if class_count[labels_to_use.index(label)] < 1000 :
+        #if class_count[labels_to_use.index(label)] < 1000 :
+        if label not in individual_labels:
             class_label = 'small_class'
         else:
             class_label = label
-        if label in ['badfocus<artefact', 'detritus', 'bubble']:
-            label = 'not_useful'
         if class_label not in labels:
             labels.append(class_label)
         f.write("%s,%s,%s\n"%(file_path,class_label,label))
@@ -170,5 +186,5 @@ def make_train_test_split(df, exp_name):
     write_data_file(df, valid_rows, 'valid',  overall_dir)
     write_data_file(df, train_rows, 'train',  overall_dir)
 
-exp_name = 'uvp_big_1000small_noliving_norotate'
+exp_name = 'uvp_big_1000small_noliving_norotate_other'
 make_train_test_split(many_dd, exp_name)

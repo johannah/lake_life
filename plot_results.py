@@ -170,12 +170,13 @@ def plot_history(history_dict, filename):
     plt.plot(history_dict['train'], label='train')
     plt.plot(history_dict['valid'], label='valid')
     plt.scatter([_ind1, _ind2], rs, marker='x', s=30)
+    plt.title('Max Accuracy:%.03f CKPT:%s' %(history_dict['valid'][_ind1], _ind1))
     plt.legend()
     plt.savefig(filename)
     plt.close()
 
 if __name__ == '__main__':
-    exp_name = 'uvp_big_small_noliving_norotate'
+    exp_name = 'uvp_big_1000small_noliving_norotate'
     exp_path = os.path.join('experiments', exp_name)
     print(sys.argv)
     if len(sys.argv)>1:
