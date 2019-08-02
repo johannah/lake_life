@@ -119,11 +119,11 @@ if __name__ == '__main__':
     """
      without rotate - seems to overfit badly
     """
-    name = 'uvp_big_small_noliving_norotate'
+    name = 'uvp_big_1000small_noliving_norotate'
     datadir = './'
 
     write_dir = os.path.join('experiments', name, 'checkpoints')
-    batch_size = 64
+    batch_size = 48
     train_ds = UVPDataset(csv_file=os.path.join('experiments', name, 'train.csv'),seed=34)
     class_names = train_ds.classes
     class_counts = train_ds.class_counts
@@ -151,11 +151,11 @@ if __name__ == '__main__':
     num_classes = len(class_names)
 
     # Number of epochs to train for
-    num_epochs = 1500
+    num_epochs = 100
 
     # Flag for feature extracting. When False, we finetune the whole model,
     #   when True we only update the reshaped layer params
-    feature_extract = False
+    # feature_extract = False
     # print(rmodel)
     # last layer: (fc): Linear(in_features=2048, out_features=1000, bias=True)
     # need to reshape
@@ -172,16 +172,16 @@ if __name__ == '__main__':
     #  is True.
     params_to_update = rmodel.parameters()
     #print("Params to learn:")
-    if feature_extract:
-        params_to_update = []
-        for name,param in rmodel.named_parameters():
-            if param.requires_grad == True:
-                params_to_update.append(param)
-                print('update', "\t",name)
-    else:
-        for name,param in rmodel.named_parameters():
-            if param.requires_grad == True:
-                print('do not update', "\t",name)
+    #if feature_extract:
+    #    params_to_update = []
+    #    for name,param in rmodel.named_parameters():
+    #        if param.requires_grad == True:
+    #            params_to_update.append(param)
+    #            print('update', "\t",name)
+    #else:
+    #    for name,param in rmodel.named_parameters():
+    #        if param.requires_grad == True:
+    #            print('do not update', "\t",name)
 
     # Observe that all parameters are being optimized
     optimizer = optim.Adam(params_to_update, lr=1e-4)

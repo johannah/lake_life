@@ -45,7 +45,7 @@ dd.loc[:,'num'] = range(dd.shape[0])
 unique = list(set(dd['object_annotation_category']))
 dont_use = ['unknown', 'othertocheck', 'multiple<other', '[t]',
             'other<living', 'living', 'not-living', 'other<plastic',
-            'fiber<detritus', 'part<other',
+            'part<other',
             'other<living', 'living', 'part<other','part<copepoda' ,'fiber<detritus' ]
 labels_to_use = []
 class_count = []
@@ -130,19 +130,23 @@ many_dd = many_dd.set_index(np.arange(many_dd.shape[0]))
 # make train test split
 def write_data_file(dataframe, row_inds, data_type, base_dir):
     fname = os.path.join(base_dir, data_type+'.csv')
+    labels = []
     print('writing', fname)
     f = open(fname, 'w')
     for i in row_inds:
         label = dataframe.loc[i, 'object_annotation_category']
         file_path = os.path.join(datadir, dataframe.loc[i,'exp_name'], dataframe.loc[i, 'sub_exp_name'], dataframe.loc[i, 'img_file_name'])
-        if class_count[labels_to_use.index(label)] < 5000 :
+        if class_count[labels_to_use.index(label)] < 1000 :
             class_label = 'small_class'
         else:
             class_label = label
         if label in ['badfocus<artefact', 'detritus', 'bubble']:
             label = 'not_useful'
+        if class_label not in labels:
+            labels.append(class_label)
         f.write("%s,%s,%s\n"%(file_path,class_label,label))
     f.close()
+    print("CLASSES INCLUDE", labels)
 
 def make_train_test_split(df, exp_name):
     many_inds = np.array(df.index)
@@ -166,5 +170,5 @@ def make_train_test_split(df, exp_name):
     write_data_file(df, valid_rows, 'valid',  overall_dir)
     write_data_file(df, train_rows, 'train',  overall_dir)
 
-exp_name = 'uvp_big_small_v2_noliving'
+exp_name = 'uvp_big_1000small_noliving_norotate'
 make_train_test_split(many_dd, exp_name)
