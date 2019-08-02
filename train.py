@@ -52,9 +52,10 @@ def train_model(model, dataloaders, optimizer, criterion, num_epochs=25, device=
 
             n_batches = 0
             # Iterate over data.
-            for inputs, labels, filepaths, classnames, idxs in dataloaders[phase]:
+            for data in dataloaders[phase]:
+                inputs, class_num, class_name, filepath, label_num, label_name, idx = data
                 inputs = inputs.to(device)
-                labels = labels.to(device)
+                class_nums = class_nums.to(device)
                 # zero the parameter gradients
                 optimizer.zero_grad()
 
@@ -62,7 +63,7 @@ def train_model(model, dataloaders, optimizer, criterion, num_epochs=25, device=
                 with torch.set_grad_enabled(phase == 'train'):
                     # Get model outputs and calculate loss
                     outputs = model(inputs)
-                    loss = criterion(outputs, labels)
+                    loss = criterion(outputs, class_nums)
 
                     _, preds = torch.max(outputs, 1)
 
@@ -74,16 +75,16 @@ def train_model(model, dataloaders, optimizer, criterion, num_epochs=25, device=
                 # statistics
                 n_batches += 1
                 running_loss += loss.item() * inputs.size(0)
-                running_corrects += torch.sum(preds == labels.data)
+                running_corrects += torch.sum(preds == class_nums.data)
 
-                ncorr = torch.sum(preds == labels.data).cpu().numpy()
+                ncorr = torch.sum(preds == class_nums.data).cpu().numpy()
                 pcorr = ncorr/float(outputs.shape[0])
 
                 #if pcorr < 0.6:
                 #    print('---------------------------')
                 #    print(phase, n_batches, pcorr)
-                #    print(sorted(list((labels.cpu().numpy()))))
-                #    print(labels.cpu().numpy())
+                #    print(sorted(list((class_nums.cpu().numpy()))))
+                #    print(class_nums.cpu().numpy())
                 #    print(outputs.argmax(1).detach().cpu().numpy())
                 #    print('correct %s/%s'%(ncorr, outputs.shape[0]))
 
