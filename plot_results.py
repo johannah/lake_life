@@ -107,19 +107,22 @@ def evaluate_model(model, dataloaders, basename=''):
             y_pred = []
 
             cnt = 0
-            for inputs, labels, img_path, class_name, didx in dataloaders[phase]:
+            for data in dataloaders[phase]:
+                 #inputs, labels, img_path, class_name, didx
+                 inputs, class_num, class_name, filepath, label_num, label_name, idx = data
                  inputs = inputs.to(device)
-                 labels = labels.to(device)
+
+                 class_num = class_num.to(device)
                  outputs = model(inputs)
                  _, preds = torch.max(outputs, 1)
-                 llist = list(labels.detach().numpy())
+                 llist = list(class_num.detach().numpy())
                  lpred = list(preds.detach().numpy())
 
-                 ninputs = inputs.detach().numpy()
                  y_true.extend(llist)
                  y_pred.extend(lpred)
 
                  ### keep track of everything we got wrong
+                 # ninputs = inputs.detach().numpy()
                  #wrong_inds = [ind for ind,(lp,l) in enumerate(zip(lpred, llist)) if not lp==l]
                  ##if False:
                  #if cnt < 200:
@@ -176,7 +179,7 @@ def plot_history(history_dict, filename):
     plt.close()
 
 if __name__ == '__main__':
-    exp_name = 'uvp_big_1000small_noliving_norotate_other'
+    exp_name = 'uvp_big_1000small_noliving_norotate_other_bg0'
     exp_path = os.path.join('experiments', exp_name)
     print(sys.argv)
     if len(sys.argv)>1:
@@ -189,10 +192,10 @@ if __name__ == '__main__':
     plot_history(ckpt_dict['loss'], bname+'_loss.png')
     plot_history(ckpt_dict['accuracy'], bname+'_accuracy.png')
     batch_size = 32
-    train_ds = UVPDataset(csv_file=os.path.join(exp_path, 'train.csv'), seed=34, augment=False)
+    train_ds = UVPDataset(csv_file=os.path.join(exp_path, 'train.csv'), seed=34, valid=True)
     class_names = train_ds.classes
     class_weights = train_ds.weights
-    valid_ds = UVPDataset(csv_file=os.path.join(exp_path, 'valid.csv'), seed=334, classes=class_names, weights=class_weights, augment=False)
+    valid_ds = UVPDataset(csv_file=os.path.join(exp_path, 'valid.csv'), seed=334, classes=class_names, weights=class_weights, valid=True)
     train_dl = torch.utils.data.DataLoader(
             train_ds,
             batch_size=batch_size,

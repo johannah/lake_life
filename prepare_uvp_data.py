@@ -186,5 +186,5 @@ def make_train_test_split(df, exp_name):
     write_data_file(df, valid_rows, 'valid',  overall_dir)
     write_data_file(df, train_rows, 'train',  overall_dir)
 
-exp_name = 'uvp_big_1000small_noliving_norotate_other'
+exp_name = 'uvp_big_1000small_noliving_norotate_other_bg0'
 make_train_test_split(many_dd, exp_name)

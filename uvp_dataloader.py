@@ -14,7 +14,7 @@ from copy import deepcopy
 from PIL import Image, ImageChops
 
 class UVPDataset(Dataset):
-    def __init__(self, csv_file, seed, classes='', weights='', augment=True, run_mean=0, run_std=0): 
+    def __init__(self, csv_file, seed, classes='', labels='', weights='', valid=False, run_mean=0, run_std=0):
         #run_mean=0.9981, run_std=.0160):
         """
         Args:
@@ -26,7 +26,7 @@ class UVPDataset(Dataset):
         self.img_labels = []
         self.random_state = np.random.RandomState(seed)
         # load file data
-        self.input_size = 256
+        self.input_size = 224
         print('loading csv:%s'%csv_file)
         assert os.path.exists(csv_file); # csv file given doesnt exist
         f = open(csv_file, 'r')
@@ -36,29 +36,37 @@ class UVPDataset(Dataset):
             self.img_filepaths.append(ll[0])
             self.img_classes.append(ll[1])
             self.img_labels.append(ll[2])
-        self.augment = augment
         # TODO - find actual mean/std
 
-        func_transforms = [
-            #torchvision.transforms.ColorJitter(hue=.1, saturation=.1,
-            #                                   brightness=.1, contrast=.1),
-            # random rotation pads with zeros
-            # rotate looks bad when the critter is on the edge
-            #torchvision.transforms.RandomRotation(45, expand=True),
-            torchvision.transforms.Resize(size=(self.input_size, self.input_size)),
-            torchvision.transforms.RandomHorizontalFlip(),
-            transforms.RandomVerticalFlip(),
-            transforms.ToTensor(),
-             ]
+        if not valid:
+            func_transforms = [
+                torchvision.transforms.ColorJitter(hue=.1, saturation=.1,
+                                                   brightness=.1, contrast=.1),
+                # rotate looks bad when the critter is on the edge
+                #torchvision.transforms.RandomRotation(45, expand=False),
+                torchvision.transforms.Resize(size=(self.input_size, self.input_size)),
+                torchvision.transforms.RandomHorizontalFlip(),
+                transforms.RandomVerticalFlip(),
+                transforms.ToTensor(),
+                 ]
+        else:
+            func_transforms = [
+                torchvision.transforms.Resize(size=(self.input_size, self.input_size)),
+                transforms.ToTensor(),
+                 ]
         self.transforms = torchvision.transforms.Compose(func_transforms)
 
         self.indexes = np.arange(len(self.img_filepaths))
         if classes == '':
             print('finding classes')
             self.classes = sorted(list(set(self.img_classes)))
-            self.labels = sorted(list(set(self.img_labels)))
         else:
             self.classes = classes
+        if labels == '':
+            self.labels = sorted(list(set(self.img_labels)))
+        else:
+            self.labels = labels
+
         self.find_class_counts()
         if weights == '':
             print('finding weights')
@@ -119,16 +127,10 @@ class UVPDataset(Dataset):
         image = deepcopy(in_image)
         hh,ww = image.shape
         if hh>h:
-            if self.augment:
-                uch = max(0, int((h/2.0)-center_y))
-            else:
-                uch = max(0, int((hh/2.0)-(h/2.0)))
+            uch = max(0, int((h/2.0)-center_y))
             image = image[uch:uch+h]
         if ww > w:
-            if self.augment:
-                ucw = max(0, int((w/2.0)-center_x))
-            else:
-                ucw = max(0, int((ww/2.0)-(w/2.0)))
+            ucw = max(0, int((w/2.0)-center_x))
             image = image[:,ucw:ucw+w]
         return image
 
@@ -149,8 +151,6 @@ class UVPDataset(Dataset):
         centery = np.median(np.where(image>0)[1])
         centerx = np.median(np.where(image>0)[0])
         return centery, centerx
-
-
 
     def trim(self, im, border):
         bg = Image.new(im.mode, im.size, border)
@@ -178,15 +178,17 @@ class UVPDataset(Dataset):
         # remove label at bottom
         bottom = 45 #np.argmin(image.sum(1))-10
         # flip to enable rotation which infills with 0
-        image = (255-image[:hh-bottom,:])
+        #image = (255-image[:hh-bottom,:])
+        image = image[:hh-bottom,:]
         #center_y, center_x = self.get_center(image)
         #image = self.crop_to_size(image, self.input_size, self.input_size, center_y, center_x)
         #image = self.add_padding(image, self.input_size, self.input_size)
         # turn into PIL
-        image = self.trim(Image.fromarray(image), 0)
-        # normalize between 0 and 1
-        timage = self.transforms(image)/255.0
-        return timage, class_num, class_name, filepath, label_num, label_name, idx 
+        image = Image.fromarray(image)
+        image = self.trim(image, 0)
+        # normalize between 0 and 1 seems to hurt
+        timage = self.transforms(image)
+        return timage, class_num, class_name, filepath, label_num, label_name, idx
 
 if __name__ == '__main__':
     import matplotlib

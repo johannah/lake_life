@@ -55,7 +55,7 @@ def train_model(model, dataloaders, optimizer, criterion, num_epochs=25, device=
             for data in dataloaders[phase]:
                 inputs, class_num, class_name, filepath, label_num, label_name, idx = data
                 inputs = inputs.to(device)
-                class_nums = class_nums.to(device)
+                class_num = class_num.to(device)
                 # zero the parameter gradients
                 optimizer.zero_grad()
 
@@ -63,7 +63,7 @@ def train_model(model, dataloaders, optimizer, criterion, num_epochs=25, device=
                 with torch.set_grad_enabled(phase == 'train'):
                     # Get model outputs and calculate loss
                     outputs = model(inputs)
-                    loss = criterion(outputs, class_nums)
+                    loss = criterion(outputs, class_num)
 
                     _, preds = torch.max(outputs, 1)
 
@@ -75,16 +75,16 @@ def train_model(model, dataloaders, optimizer, criterion, num_epochs=25, device=
                 # statistics
                 n_batches += 1
                 running_loss += loss.item() * inputs.size(0)
-                running_corrects += torch.sum(preds == class_nums.data)
+                running_corrects += torch.sum(preds == class_num.data)
 
-                ncorr = torch.sum(preds == class_nums.data).cpu().numpy()
+                ncorr = torch.sum(preds == class_num.data).cpu().numpy()
                 pcorr = ncorr/float(outputs.shape[0])
 
                 #if pcorr < 0.6:
                 #    print('---------------------------')
                 #    print(phase, n_batches, pcorr)
-                #    print(sorted(list((class_nums.cpu().numpy()))))
-                #    print(class_nums.cpu().numpy())
+                #    print(sorted(list((class_num.cpu().numpy()))))
+                #    print(class_num.cpu().numpy())
                 #    print(outputs.argmax(1).detach().cpu().numpy())
                 #    print('correct %s/%s'%(ncorr, outputs.shape[0]))
 
@@ -120,16 +120,16 @@ if __name__ == '__main__':
     """
      without rotate - seems to overfit badly
     """
-    name = 'uvp_big_1000small_noliving_norotate_other'
+    name = 'uvp_big_1000small_noliving_norotate_other_bg0_trim'
     datadir = './'
 
     write_dir = os.path.join('experiments', name, 'checkpoints')
     batch_size = 48
-    train_ds = UVPDataset(csv_file=os.path.join('experiments', name, 'train.csv'),seed=34)
+    train_ds = UVPDataset(csv_file=os.path.join('experiments', name, 'train.csv'), seed=34, valid=False)
     class_names = train_ds.classes
     class_counts = train_ds.class_counts
     class_weights = train_ds.weights
-    valid_ds = UVPDataset(csv_file=os.path.join('experiments', name, 'valid.csv'), seed=334, classes=class_names, weights=class_weights)
+    valid_ds = UVPDataset(csv_file=os.path.join('experiments', name, 'valid.csv'), seed=334, valid=True, classes=class_names, weights=class_weights)
     train_weighted_sampler = torch.utils.data.sampler.WeightedRandomSampler(torch.FloatTensor(train_ds.img_weights), len(train_ds), replacement=True)
     valid_weighted_sampler = torch.utils.data.sampler.WeightedRandomSampler(torch.FloatTensor(valid_ds.img_weights), len(valid_ds), replacement=True)
     train_dl = torch.utils.data.DataLoader(
