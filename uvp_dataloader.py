@@ -43,7 +43,7 @@ class UVPDataset(Dataset):
                 torchvision.transforms.ColorJitter(hue=.1, saturation=.1,
                                                    brightness=.1, contrast=.1),
                 # rotate looks bad when the critter is on the edge
-                #torchvision.transforms.RandomRotation(45, expand=False),
+                torchvision.transforms.RandomRotation(45, expand=False),
                 torchvision.transforms.Resize(size=(self.input_size, self.input_size)),
                 torchvision.transforms.RandomHorizontalFlip(),
                 transforms.RandomVerticalFlip(),
@@ -178,11 +178,11 @@ class UVPDataset(Dataset):
         # remove label at bottom
         bottom = 45 #np.argmin(image.sum(1))-10
         # flip to enable rotation which infills with 0
-        #image = (255-image[:hh-bottom,:])
-        image = image[:hh-bottom,:]
-        #center_y, center_x = self.get_center(image)
-        #image = self.crop_to_size(image, self.input_size, self.input_size, center_y, center_x)
-        #image = self.add_padding(image, self.input_size, self.input_size)
+        image = (255-image[:hh-bottom,:])
+        #image = image[:hh-bottom,:]
+        center_y, center_x = self.get_center(image)
+        image = self.crop_to_size(image, self.input_size, self.input_size, center_y, center_x)
+        image = self.add_padding(image, self.input_size, self.input_size)
         # turn into PIL
         image = Image.fromarray(image)
         image = self.trim(image, 0)
@@ -195,7 +195,7 @@ if __name__ == '__main__':
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     rs = np.random.RandomState(3)
-    bdir = 'experiments/uvp_big_1000small_noliving_norotate_other'
+    bdir = 'experiments/uvp_exp1'
     train_ds = UVPDataset(csv_file=os.path.join(bdir,'train.csv'), seed=34)
     #valid_ds = EcotaxaDataset(csv_file='valid.csv', seed=334, classes=class_names, weights=class_weights)
     class_names = train_ds.classes

@@ -59,8 +59,12 @@ for ztype in unique:
 
 
 # Riwan says all but the last three are important
+#individual_labels = ['cladocera', 'copepoda', 'holopediidae',
+#                      'badfocus<artefact', 'othertocheck',
+#                      'chaoboridae', 'detritus', 'volvoxlike', 'rotifera']
+#
 individual_labels = ['cladocera', 'copepoda', 'holopediidae',
-                      'badfocus<artefact', 'othertocheck',
+                      'badfocus<artefact', 
                       'chaoboridae', 'detritus', 'volvoxlike', 'rotifera']
 """
 to check -
@@ -156,6 +160,8 @@ def write_data_file(dataframe, row_inds, data_type, base_dir):
         #if class_count[labels_to_use.index(label)] < 1000 :
         if label not in individual_labels:
             class_label = 'small_class'
+        if label in ['badfocus<artefact', 'detritus']:
+            class_label = 'not_useful'
         else:
             class_label = label
         if class_label not in labels:
@@ -186,5 +192,6 @@ def make_train_test_split(df, exp_name):
     write_data_file(df, valid_rows, 'valid',  overall_dir)
     write_data_file(df, train_rows, 'train',  overall_dir)
 
-exp_name = 'uvp_big_1000small_noliving_norotate_other_bg0'
+#exp_name = 'uvp_big_1000small_noliving_norotate_other_bg0'
+exp_name = 'uvp_big_1000small_noliving_rotate_bg0_trim_combine'
 make_train_test_split(many_dd, exp_name)
