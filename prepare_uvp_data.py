@@ -7,33 +7,40 @@ import os
 import sys
 import copy
 from glob import glob
-import pandas
+import pandas as pd
 from collections import Counter
 from imageio import imread
 from IPython import embed
 
 random_state = np.random.RandomState(394)
+datadir = './data/UVP_data_folder/'
+
 """
 images are color, but are the same across all channels (grayscale)
 bottom ~20 pixels in y axis are the scale measurement
 they all seem to have "1mm" at the bottom - are there any that are at a different zoom scale"""
 
-datadir = './data/UVP_data_folder/'
 # each UVP folder has a subdir then another dir w/ tsv file
-data_labels = glob(os.path.join(datadir, '*', '*', '*.tsv*'))
-for i in range(len(data_labels)):
-  print('loading', data_labels[i])
-  fp = pandas.read_csv(data_labels[i], sep='\t')
-  tsv_name = os.path.split(data_labels[i])[1]
-  fp.loc[:,'sub_exp_name'] = os.path.split(os.path.split(data_labels[i])[0])[1]
-  fp.loc[:,'exp_name'] = os.path.split(os.path.split(os.path.split(data_labels[i])[0])[0])[1]
-  fp.loc[:,'tsv_name'] = tsv_name
-  fp.loc[:,'dir_name'] = data_labels[i]
-  if not i:
-    dd = fp
-  else:
-    dd = dd.append(fp)
-dd.loc[:,'num'] = range(dd.shape[0])
+summary_file = os.path.join(datadir, 'data_summary.tsv')
+if not os.path.exists(summary_file):
+    data_labels = glob(os.path.join(datadir, '*', '*', '*.tsv*'))
+    for i in range(len(data_labels)):
+      print('loading', data_labels[i])
+      fp = pd.read_csv(data_labels[i], sep='\t')
+      tsv_name = os.path.split(data_labels[i])[1]
+      fp.loc[:,'sub_exp_name'] = os.path.split(os.path.split(data_labels[i])[0])[1]
+      fp.loc[:,'exp_name'] = os.path.split(os.path.split(os.path.split(data_labels[i])[0])[0])[1]
+      fp.loc[:,'tsv_name'] = tsv_name
+      fp.loc[:,'dir_name'] = data_labels[i]
+      if not i:
+        dd = fp
+      else:
+        dd = dd.append(fp)
+    dd.loc[:,'num'] = range(dd.shape[0])
+    dd.to_csv(summary_file, sep=',', header=True)
+else:
+    dd = pd.read_csv(summary_file, sep=',')
+
 # object_annotation_category
 # img_file_name
 # object_annotation_status
@@ -51,7 +58,7 @@ dont_use = ['unknown', '[t]',
 labels_to_use = []
 class_count = []
 for ztype in unique:
-    count = np.sum(pandas.Series(dd['object_annotation_category']).str.count(ztype))
+    count = np.sum(pd.Series(dd['object_annotation_category']).str.count(ztype))
     if ztype.lower() not in dont_use:
       labels_to_use.append(ztype)
       print(ztype, count)
