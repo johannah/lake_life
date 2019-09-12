@@ -121,7 +121,7 @@ if __name__ == '__main__':
      without rotate - seems to overfit badly
     """
     #name = 'uvp_big_1000small_noliving_rotate_other_bg0'
-    name = 'uvp_big_1000small_noliving_rotate_bg0_trim_combine'
+    name = 'uvp_big_1000small_noliving_rotate_bg0_trim_combine_new'
     datadir = './'
 
     write_dir = os.path.join('experiments', name, 'checkpoints')

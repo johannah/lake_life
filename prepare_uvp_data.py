@@ -44,23 +44,21 @@ dd.loc[:,'num'] = range(dd.shape[0])
 
 unique = list(set(dd['object_annotation_category']))
 dont_use = ['unknown', '[t]',
-            'living', 'not-living',
+            'living', 'not-living', 'other<living',
             'part<other',
-            'part<copepoda']
+            'part<copepoda', 'othertocheck']
 
 labels_to_use = []
 class_count = []
 for ztype in unique:
     count = np.sum(pandas.Series(dd['object_annotation_category']).str.count(ztype))
     if ztype.lower() not in dont_use:
-      labels_to_use.append(ztype.lower())
+      labels_to_use.append(ztype)
       print(ztype, count)
       class_count.append(count)
 
 print(labels_to_use)
 print(class_count)
-
-# Riwan says all but the last three are important
 #individual_labels = ['cladocera', 'copepoda', 'holopediidae',
 #                      'badfocus<artefact', 'othertocheck',
 #                      'chaoboridae', 'detritus', 'volvoxlike', 'rotifera']
@@ -143,11 +141,12 @@ multiple<other
 #   The nauplius form is so different from the adult form that it was once thought to be a separate species.
 
 for xc,ml in enumerate(labels_to_use):
-  this_dd = dd[dd.loc[:,'object_annotation_category']==ml]
-  if not xc:
-    many_dd = this_dd
-  else:
-    many_dd = many_dd.append(this_dd)
+    this_dd = dd[dd.loc[:,'object_annotation_category']==ml]
+    print('adding', ml, this_dd.shape)
+    if not xc:
+        many_dd = this_dd
+    else:
+        many_dd = many_dd.append(this_dd)
 many_dd = many_dd.set_index(np.arange(many_dd.shape[0]))
 
 # make train test split
@@ -157,15 +156,14 @@ def write_data_file(dataframe, row_inds, data_type, base_dir):
     print('writing', fname)
     f = open(fname, 'w')
     for i in row_inds:
-        label = dataframe.loc[i, 'object_annotation_category'].lower()
+        label = dataframe.loc[i, 'object_annotation_category']
         file_path = os.path.join(datadir, dataframe.loc[i,'exp_name'], dataframe.loc[i, 'sub_exp_name'], dataframe.loc[i, 'img_file_name'])
-        label = label.lower()
-        if class_count[labels_to_use.index(label)] < 1500 :
-            class_label = 'small_class'
-        elif label in ['badfocus<artefact', 'detritus']:
+        if label in ['badfocus<artefact', 'detritus']:
             class_label = 'not_useful'
+        elif class_count[labels_to_use.index(label)] < 1800:
+            class_label = 'small_class'
         else:
-            class_label = label
+            class_label = label.lower()
         if class_label not in labels:
             labels.append(class_label)
         f.write("%s,%s,%s\n"%(file_path,class_label,label))
