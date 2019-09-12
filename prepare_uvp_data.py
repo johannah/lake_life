@@ -65,9 +65,9 @@ print(class_count)
 #                      'badfocus<artefact', 'othertocheck',
 #                      'chaoboridae', 'detritus', 'volvoxlike', 'rotifera']
 #
-individual_labels = ['cladocera', 'copepoda', 'holopediidae',
-                      'badfocus<artefact',
-                      'chaoboridae', 'detritus', 'volvoxlike', 'rotifera']
+#individual_labels = ['cladocera', 'copepoda', 'holopediidae',
+#                      'badfocus<artefact',
+#                      'chaoboridae', 'detritus', 'volvoxlike', 'rotifera']
 """
 to check -
  the variants of living are not really classes
@@ -159,8 +159,8 @@ def write_data_file(dataframe, row_inds, data_type, base_dir):
     for i in row_inds:
         label = dataframe.loc[i, 'object_annotation_category'].lower()
         file_path = os.path.join(datadir, dataframe.loc[i,'exp_name'], dataframe.loc[i, 'sub_exp_name'], dataframe.loc[i, 'img_file_name'])
-        if class_count[labels_to_use.index(label.lower())] < 1000 :
-        #if label not in individual_labels:
+        label = label.lower()
+        if class_count[labels_to_use.index(label)] < 1500 :
             class_label = 'small_class'
         elif label in ['badfocus<artefact', 'detritus']:
             class_label = 'not_useful'
@@ -195,5 +195,5 @@ def make_train_test_split(df, exp_name):
     write_data_file(df, train_rows, 'train',  overall_dir)
 
 #exp_name = 'uvp_big_1000small_noliving_norotate_other_bg0'
-exp_name = 'uvp_big_1000small_noliving_rotate_bg0_trim_combine'
+exp_name = 'uvp_big_1000small_noliving_rotate_bg0_trim_combine_new'
 make_train_test_split(many_dd, exp_name)
