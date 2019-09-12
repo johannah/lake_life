@@ -14,7 +14,7 @@ from copy import deepcopy
 from PIL import Image, ImageChops
 
 class UVPDataset(Dataset):
-    def __init__(self, csv_file, seed, classes='', labels='', weights='', valid=False, run_mean=0, run_std=0):
+    def __init__(self, csv_file, seed, classes='', labels='', weights='', valid=False, run_mean=0, run_std=0, small=False):
         #run_mean=0.9981, run_std=.0160):
         """
         Args:
@@ -33,11 +33,17 @@ class UVPDataset(Dataset):
 
         for line in f.readlines():
             ll = line.strip().split(',')
-            self.img_filepaths.append(ll[0])
-            self.img_classes.append(ll[1])
-            self.img_labels.append(ll[2])
+            if not small:
+                self.img_filepaths.append(ll[0])
+                self.img_classes.append(ll[1])
+                self.img_labels.append(ll[2])
+            else:
+                # divide small classes
+                if ll[1] == 'small_class':
+                    self.img_filepaths.append(ll[0])
+                    self.img_classes.append(ll[2])
+                    self.img_labels.append(ll[2])
         # TODO - find actual mean/std
-
         if not valid:
             func_transforms = [
                 torchvision.transforms.ColorJitter(hue=.1, saturation=.1,

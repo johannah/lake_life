@@ -180,7 +180,7 @@ def plot_history(history_dict, filename):
 
 if __name__ == '__main__':
     #exp_name = 'uvp_big_1000small_noliving_rotate_other_bg0'
-    exp_name = 'uvp_big_1000small_noliving_rotate_bg0_trim_combine'
+    exp_name = 'uvp_big_1000small_noliving_rotate_bg0_trim_combine_new'
     exp_path = os.path.join('experiments', exp_name)
     print(sys.argv)
     if len(sys.argv)>1:
