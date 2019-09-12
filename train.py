@@ -121,16 +121,31 @@ if __name__ == '__main__':
      without rotate - seems to overfit badly
     """
     #name = 'uvp_big_1000small_noliving_rotate_other_bg0'
+    small = True
     name = 'uvp_big_1000small_noliving_rotate_bg0_trim_combine_new'
+    exp_dir = os.path.join('experiments', name)
+    if small:
+        small_name = name+'_small'
+        small_exp_dir = os.path.join('experiments', small_name)
+        if not os.path.exists(small_exp_dir):
+            os.makedirs(small_exp_dir)
+        for phase in ['train', 'valid']:
+            cmd = 'cp %s %s' %(
+                os.path.join(exp_dir, '%s.csv' %phase),
+                os.path.join(small_exp_dir, '%s.csv'%phase))
+            print(cmd)
+            os.system(cmd)
+        name = small_name
+        exp_dir = small_exp_dir
     datadir = './'
 
     write_dir = os.path.join('experiments', name, 'checkpoints')
     batch_size = 64
-    train_ds = UVPDataset(csv_file=os.path.join('experiments', name, 'train.csv'), seed=34, valid=False)
+    train_ds = UVPDataset(csv_file=os.path.join('experiments', name, 'train.csv'), seed=34, valid=False, small=small)
     class_names = train_ds.classes
     class_counts = train_ds.class_counts
     class_weights = train_ds.weights
-    valid_ds = UVPDataset(csv_file=os.path.join('experiments', name, 'valid.csv'), seed=334, valid=True, classes=class_names, weights=class_weights)
+    valid_ds = UVPDataset(csv_file=os.path.join('experiments', name, 'valid.csv'), seed=334, valid=True, classes=class_names, weights=class_weights, small=small)
     train_weighted_sampler = torch.utils.data.sampler.WeightedRandomSampler(torch.FloatTensor(train_ds.img_weights), len(train_ds), replacement=True)
     valid_weighted_sampler = torch.utils.data.sampler.WeightedRandomSampler(torch.FloatTensor(valid_ds.img_weights), len(valid_ds), replacement=True)
     train_dl = torch.utils.data.DataLoader(
