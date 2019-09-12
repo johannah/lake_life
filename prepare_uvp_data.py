@@ -53,10 +53,12 @@ class_count = []
 for ztype in unique:
     count = np.sum(pandas.Series(dd['object_annotation_category']).str.count(ztype))
     if ztype.lower() not in dont_use:
-      labels_to_use.append(ztype)
+      labels_to_use.append(ztype.lower())
       print(ztype, count)
       class_count.append(count)
 
+print(labels_to_use)
+print(class_count)
 
 # Riwan says all but the last three are important
 #individual_labels = ['cladocera', 'copepoda', 'holopediidae',
@@ -64,7 +66,7 @@ for ztype in unique:
 #                      'chaoboridae', 'detritus', 'volvoxlike', 'rotifera']
 #
 individual_labels = ['cladocera', 'copepoda', 'holopediidae',
-                      'badfocus<artefact', 
+                      'badfocus<artefact',
                       'chaoboridae', 'detritus', 'volvoxlike', 'rotifera']
 """
 to check -
@@ -157,10 +159,10 @@ def write_data_file(dataframe, row_inds, data_type, base_dir):
     for i in row_inds:
         label = dataframe.loc[i, 'object_annotation_category'].lower()
         file_path = os.path.join(datadir, dataframe.loc[i,'exp_name'], dataframe.loc[i, 'sub_exp_name'], dataframe.loc[i, 'img_file_name'])
-        #if class_count[labels_to_use.index(label)] < 1000 :
-        if label not in individual_labels:
+        if class_count[labels_to_use.index(label.lower())] < 1000 :
+        #if label not in individual_labels:
             class_label = 'small_class'
-        if label in ['badfocus<artefact', 'detritus']:
+        elif label in ['badfocus<artefact', 'detritus']:
             class_label = 'not_useful'
         else:
             class_label = label

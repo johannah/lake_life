@@ -157,7 +157,7 @@ def load_latest_checkpoint(loaddir='experiment_name', search='*.pth'):
     print('found %s checkpoints'%len(search))
     ckpt = search[-1]
     print('loading %s' %ckpt)
-    return ckpt, torch.load(ckpt)
+    return ckpt, torch.load(ckpt, map_location=lambda storage, loc: storage)
 
 def plot_history(history_dict, filename):
     try:
@@ -179,7 +179,8 @@ def plot_history(history_dict, filename):
     plt.close()
 
 if __name__ == '__main__':
-    exp_name = 'uvp_big_1000small_noliving_norotate_other_bg0'
+    #exp_name = 'uvp_big_1000small_noliving_rotate_other_bg0'
+    exp_name = 'uvp_big_1000small_noliving_rotate_bg0_trim_combine'
     exp_path = os.path.join('experiments', exp_name)
     print(sys.argv)
     if len(sys.argv)>1:
@@ -207,9 +208,12 @@ if __name__ == '__main__':
             shuffle=True, num_workers=1
         )
     dataloaders = {'train':train_dl, 'valid':valid_dl}
+    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = 'cpu'
 
     # Load the pretrained model from pytorch
-    rmodel = torchvision.models.resnet50(pretrained=True)
+    rmodel = torchvision.models.resnet50(pretrained=True).to(device)
+
     # Number of classes in the dataset
     num_classes = len(class_names)
 
@@ -221,8 +225,6 @@ if __name__ == '__main__':
     # need to reshape
     rmodel.fc = nn.Linear(2048, num_classes)
     rmodel.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
-    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    device = 'cpu'
     print('using', device)
     print("loading state dict")
     rmodel.load_state_dict(ckpt_dict['state_dict'])

@@ -120,11 +120,12 @@ if __name__ == '__main__':
     """
      without rotate - seems to overfit badly
     """
-    name = 'uvp_big_1000small_noliving_norotate_other_bg0_trim'
+    #name = 'uvp_big_1000small_noliving_rotate_other_bg0'
+    name = 'uvp_big_1000small_noliving_rotate_bg0_trim_combine'
     datadir = './'
 
     write_dir = os.path.join('experiments', name, 'checkpoints')
-    batch_size = 48
+    batch_size = 64
     train_ds = UVPDataset(csv_file=os.path.join('experiments', name, 'train.csv'), seed=34, valid=False)
     class_names = train_ds.classes
     class_counts = train_ds.class_counts
@@ -152,7 +153,7 @@ if __name__ == '__main__':
     num_classes = len(class_names)
 
     # Number of epochs to train for
-    num_epochs = 100
+    num_epochs = 35
 
     # Flag for feature extracting. When False, we finetune the whole model,
     #   when True we only update the reshaped layer params
