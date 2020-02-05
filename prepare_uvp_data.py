@@ -55,6 +55,8 @@ in the horizontal transects, seaweed is very big
 ##   the adult and then, after more molts, achieves adult development.
 ##   The nauplius form is so different from the adult form that it was once thought to be a separate species.
 #
+
+TODO - make dataset of just Holepedidae
 """
 
 
@@ -66,7 +68,7 @@ class_rules = {
         'Copepoda': '',  #37088 important
         'Copepoda X': 'Copepoda', #234 TODO ask RL about this
         'Holopediidae': '', #15797 jello capsule which is gross to fish
-        'Notonecta': '----', #20, TODO ask RL
+        'Notonecta': '', #20, TODO ask RL
         'Rotifera': '', #7137,  really tiny zooplankton in a colony - don't really care about this class
         'Unknown': 'none', #77,
         'Volvox': '', #47
@@ -86,9 +88,13 @@ class_rules = {
         'seaweed': '', #207,
         'volvoxlike': 'Volvox', #1936
         }
-              
+
 
 def load_tsv_files(data_dir, summary_path="data/UVP_data_folder/summary_path.tsv"):
+    """
+    create (or load) a summary tsv file that encapsulates the entire dataset
+    follow the rules in class_rules to combine or trash particular classes
+    """
     data_labels = sorted(glob(os.path.join(data_dir, '**', '*.tsv'), recursive=True))
     print('found %s tsv files' %len(data_labels))
     cat_path = summary_path.replace('.tsv', '_counts.tsv')
@@ -99,7 +105,7 @@ def load_tsv_files(data_dir, summary_path="data/UVP_data_folder/summary_path.tsv
             # row 1 (zero indexed) is parameter which tells datatype
             try:
                 fp = pd.read_csv(data_labels[i], sep='\t', skiprows=[1])
-            except UnicodeDecodeError as  e:
+            except UnicodeDecodeError as e:
                 print('error loading %s - trying different encoding'%data_labels[i])
                 fp = pd.read_csv(data_labels[i], sep='\t', skiprows=[1], encoding = "ISO-8859-1")
             base = os.path.split(os.path.split(data_labels[i])[0])[0]
@@ -126,7 +132,7 @@ def load_tsv_files(data_dir, summary_path="data/UVP_data_folder/summary_path.tsv
             fp['class'] = refined_object_classes
             output = fp['class'].value_counts()
             file_categories_dict[quick_name] =  dict(output)
-            for name, val in output.items(): 
+            for name, val in output.items():
                 if name not in file_categories_dict['all'].keys():
                     print('adding', name)
                     file_categories_dict['all'][name] = val
@@ -160,7 +166,6 @@ def make_train_test_split(df, exp_name, counts):
     many_inds = np.array(df.index)
     random_state.shuffle(many_inds)
     n_valid = int(many_inds.shape[0]*.12)
-    min_class_count_valid = 3
     valid_class_count_dict = {}
     valid_inds = many_inds[:n_valid]
     train_rows = []
@@ -197,5 +202,6 @@ if __name__ == '__main__':
     exp_name = 'uvp_warmup'
     data_dir = './data/UVP_data_folder/'
     summary_path = os.path.join(data_dir, 'data_summary.tsv')
-    summary_file, all_categories = load_tsv_files(data_dir, summary_path)
-    make_train_test_split(summary_file, exp_name, all_categories)
+    summary, all_categories = load_tsv_files(data_dir, summary_path)
+    summary, all_categories = load_tsv_files(data_dir, summary_path)
+    make_train_test_split(summary, exp_name, all_categories)

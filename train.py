@@ -39,9 +39,6 @@ def train_model(model_dict, dataloaders, optimizer, criterion, num_epochs=25, de
     accuracies = {'train':[], 'valid':[]}
     losses = {'train':[], 'valid':[]}
 
-    best_model_wts = copy.deepcopy(model.state_dict())
-    best_acc = 0.0
-
     for epoch in range(num_epochs):
         print('Epoch {}/{}'.format(epoch, num_epochs - 1))
         print('-' * 10)
@@ -49,12 +46,16 @@ def train_model(model_dict, dataloaders, optimizer, criterion, num_epochs=25, de
         # Each epoch has a training and validation phase
         #for phase in ['train', 'valid']:
         for phase in ['valid', 'train']:
+            print('starting %s'%phase)
             model_dict = set_model_mode(model_dict, phase)
-            model.train()  # Set model to training mode
-            running_loss = 0.0
-            running_corrects = 0
+            large_running_loss = small_running_loss = 0.0
+            large_running_corrects = small_running_corrects =  0
             n_batches = 0
             # Iterate over data.
+            if phase == 'train':
+                small_class_idx = train_ds.large_classes.index('wrong_class_size')
+            else:
+                small_class_idx = valid_ds.large_classes.index('wrong_class_size')
             for data in dataloaders[phase]:
                 inputs, class_num, large_class_num, small_class_num, filepath, idx = data
                 inputs = inputs.to(device)
@@ -66,10 +67,21 @@ def train_model(model_dict, dataloaders, optimizer, criterion, num_epochs=25, de
                 with torch.set_grad_enabled(phase == 'train'):
                     # Get model outputs and calculate loss
                     large_outputs = model_dict['large'](inputs)
-                    large_loss = criterion(large_outputs, large_class_num)
-                    embed()
+                    pred_large = torch.argmax(large_outputs, dim=1)
 
-                    _, preds = torch.max(outputs, 1)
+                    pred_small = pred_large==small_class_idx
+                    pred_small_inputs = inputs[pred_small]
+                    pred_small_class_num = small_class_num[pred_small]
+                    small_outputs = model_dict['small'](pred_small_inputs)
+                    # determine where large model predicted the class was small
+                    #small_inputs
+                    large_loss = criterion(large_outputs, large_class_num)
+                    small_loss = criterion(small_outputs, pred_small_class_num)
+                    loss = large_loss + small_loss
+
+                    _, small_preds = torch.max(small_outputs, 1)
+                    large_seen += large_outputs.shape[0]
+                    small_seen += small_outputs.shape[0]
 
                     # backward + optimize only if in training phase
                     if phase == 'train':
@@ -78,82 +90,56 @@ def train_model(model_dict, dataloaders, optimizer, criterion, num_epochs=25, de
 
                 # statistics
                 n_batches += 1
-                running_loss += loss.item() * inputs.size(0)
-                running_corrects += torch.sum(preds == class_num.data)
+                large_running_loss += large_loss.item() * inputs.shape[0]
+                large_running_corrects += torch.sum(pred_large == large_class_num.data).cpu().numpy()
+                small_running_loss += small_loss.item() * pred_small_inputs.shape[0]
+                small_running_corrects += torch.sum(pred_small == small_class_num[pred_small].data).cpu().numpy()
 
-                ncorr = torch.sum(preds == class_num.data).cpu().numpy()
-                pcorr = ncorr/float(outputs.shape[0])
-
-                #if pcorr < 0.6:
-                #    print('---------------------------')
-                #    print(phase, n_batches, pcorr)
-                #    print(sorted(list((class_num.cpu().numpy()))))
-                #    print(class_num.cpu().numpy())
-                #    print(outputs.argmax(1).detach().cpu().numpy())
-                #    print('correct %s/%s'%(ncorr, outputs.shape[0]))
-
-            epoch_loss = running_loss / len(dataloaders[phase].dataset)
-            epoch_acc = running_corrects.double() / len(dataloaders[phase].dataset)
+            large_epoch_loss = large_running_loss.item() / large_seen
+            large_epoch_acc = large_running_corrects.double().cpu().numpy() / large_seen
+            small_epoch_loss = small_running_loss.item() / small_seen
+            small_epoch_acc = small_running_corrects.double().cpu().numpy() / small_seen
 
 
-            print('{} Loss: {:.4f} Acc: {:.4f}'.format(phase, epoch_loss, epoch_acc))
+            print('LARGE {} Loss: {:.4f} Acc: {:.4f}'.format(phase, large_epoch_loss, large_epoch_acc))
+            print('SMALL {} Loss: {:.4f} Acc: {:.4f}'.format(phase, small_epoch_loss, small_epoch_acc))
             print('used %s batches for calculation'%n_batches)
-            accuracies[phase].append(epoch_acc)
-            losses[phase].append(epoch_loss)
-            # deep copy the model
-            if phase == 'valid' and epoch_acc > best_acc:
-                best_acc = epoch_acc
-                best_model_wts = copy.deepcopy(model.state_dict())
-
+            accuracies['large_'+phase].append(large_epoch_acc)
+            losses['large_'+phase].append(large_epoch_loss)
+            accuracies['small_'+phase].append(small_epoch_acc)
+            losses['small_'+phase].append(small_epoch_loss)
 
     time_elapsed = time.time() - since
     print('Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
     print('Best val Acc: {:4f}'.format(best_acc))
 
     ## load best model weights
-    #model.load_state_dict(best_model_wts)
-    return model, optimizer, accuracies, losses, best_model_wts
+    return model_dict, optimizer, accuracies, losses
 
 if __name__ == '__main__':
     load_model = ''
-    #load_model = 'experiments/most_merged/checkpoints/ckptRDD00130.pth'
-    # goes bad after 120
-    #load_model = 'experiments/most_merged/checkpoints/ckptwt00120.pth'
-    #load_model = 'experiments/most_merged/checkpoints/ckptwt_eval00245.pth'
-    #load_model = 'experiments/most_merged/checkpoints/ckptwt00120.pth'
+    #load_model = 'experiments/most_merged/checkpoints/ckptwt00120.pt
     """
      without rotate - seems to overfit badly
     """
     #name = 'uvp_big_1000small_noliving_rotate_other_bg0'
     small = True
-    name = 'uvp_big_1000small_noliving_rotate_bg0_trim_combine_new'
+    name = 'uvp_warmup'
     exp_dir = os.path.join('experiments', name)
-    if small:
-        small_name = name+'_small'
-        small_exp_dir = os.path.join('experiments', small_name)
-        if not os.path.exists(small_exp_dir):
-            os.makedirs(small_exp_dir)
-        for phase in ['train', 'valid']:
-            cmd = 'cp %s %s' %(
-                os.path.join(exp_dir, '%s.csv' %phase),
-                os.path.join(small_exp_dir, '%s.csv'%phase))
-            print(cmd)
-            os.system(cmd)
-        name = small_name
-        exp_dir = small_exp_dir
     datadir = './'
-
     write_dir = os.path.join('experiments', name, 'checkpoints')
     batch_size = 64
-    train_ds = UVPDataset(csv_file=os.path.join('experiments', name, 'train.csv'), seed=34, valid=False, small=small)
+    train_ds = UVPDataset(csv_file=os.path.join('experiments', name, 'train.csv'), seed=34, valid=False)
     class_names = train_ds.classes
     large_class_names = train_ds.large_classes
     small_class_names = train_ds.small_classes
     class_counts = train_ds.class_counts
     class_weights = train_ds.weights
-    valid_ds = UVPDataset(csv_file=os.path.join('experiments', name, 'valid.csv'), seed=334, valid=True, classes=class_names, weights=class_weights, small=small)
-    train_weighted_sampler = torch.utils.data.sampler.WeightedRandomSampler(torch.FloatTensor(train_ds.img_weights), len(train_ds), replacement=True)
-    valid_weighted_sampler = torch.utils.data.sampler.WeightedRandomSampler(torch.FloatTensor(valid_ds.img_weights), len(valid_ds), replacement=True)
+    valid_ds = UVPDataset(csv_file=os.path.join('experiments', name, 'valid.csv'), seed=334, valid=True, classes=class_names, weights=class_weights)
+    #train_weighted_sampler = torch.utils.data.sampler.WeightedRandomSampler(torch.FloatTensor(train_ds.img_weights), len(train_ds), replacement=True)
+    #valid_weighted_sampler = torch.utils.data.sampler.WeightedRandomSampler(torch.FloatTensor(valid_ds.img_weights), len(valid_ds), replacement=True)
+    train_weighted_sampler = torch.utils.data.sampler.WeightedRandomSampler(torch.FloatTensor(train_ds.img_weights), len(train_ds), replacement=False)
+    valid_weighted_sampler = torch.utils.data.sampler.WeightedRandomSampler(torch.FloatTensor(valid_ds.img_weights), len(valid_ds), replacement=False)
     train_dl = torch.utils.data.DataLoader(
             train_ds,
             batch_size=batch_size,
@@ -197,7 +183,7 @@ if __name__ == '__main__':
     #  doing feature extract method, we will only update the parameters
     #  that we have just initialized, i.e. the parameters with requires_grad
     #  is True.
-    params_to_update = list(large_model.parameters()) + list(small_model.paramters)
+    params_to_update = list(large_model.parameters()) + list(small_model.parameters())
     # Observe that all parameters are being optimized
     optimizer = optim.Adam(params_to_update, lr=1e-4)
 
@@ -213,7 +199,6 @@ if __name__ == '__main__':
     all_losses = {'large_train':[], 'large_valid':[], 'small_train':[], 'small_valid':[]}
     cnt_start = 0
     epoch_cnt = 0
-    best_model_wts = None
     if load_model != '':
         print('--------------------loading from %s'%load_model)
         save_dict = torch.load(load_model)
@@ -221,11 +206,10 @@ if __name__ == '__main__':
             model_dict[name].load_state_dict[name]
         cnt_start = int(save_dict['cnt'])
         print("starting from cnt", cnt_start)
-        best_model_wts = save_dict['best_model_wts']
         cnt_start = save_dict['cnt']
         all_accuracy = save_dict['accuracy']
         all_losses = save_dict['loss']
-        epoch_cnt = len(all_losses['train'])
+        epoch_cnt = len(all_losses['large_train'])
         print("have seen %s epochs"%epoch_cnt)
         try:
             optimizer.load_state_dict(save_dict['opt'])
@@ -233,7 +217,7 @@ if __name__ == '__main__':
             print('could not load opt state dict')
 
     for name in model_dict.keys():
-        model_dict.to(device)
+        model_dict[name].to(device)
     for cnt in range(cnt_start, cnt_start+1000):
         # Train and evaluate
         print("starting cnt sequence", cnt)
@@ -242,17 +226,16 @@ if __name__ == '__main__':
               'accuracy':all_accuracy,
               'loss':all_losses,
               'cnt':cnt,
-              'best_model_wts':best_model_wts,
               'num_epochs_bt_saves':num_epochs_bt_saves,
               'epoch_cnt': epoch_cnt,
                }
         for name in model_dict.keys():
-            state_dict[name] = model_dict[name].state_dict()
+            pp[name] = model_dict[name].state_dict()
 
-        cpath = os.path.join(write_dir, 'ckptwt_eval%05d.pth'%len(all_losses['train']))
+        cpath = os.path.join(write_dir, 'ckptwt_eval%05d.pt'%len(all_losses['large_train']))
         print("saving model", cpath)
         torch.save(pp, cpath)
-        model_dict, optimizer, accuracies, losses, best_model_wts = train_model(model_dict, dataloaders, optimizer, criterion, num_epochs=num_epochs_bt_saves, device=device)
+        model_dict, optimizer, accuracies, losses = train_model(model_dict, dataloaders, optimizer, criterion, num_epochs=num_epochs_bt_saves, device=device)
         for phase in all_accuracy.keys():
             all_accuracy[phase].extend(accuracies[phase])
         for phase in all_losses.keys():
