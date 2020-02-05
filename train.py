@@ -33,19 +33,17 @@ def set_model_mode(model_dict, phase):
             model_dict[name].eval()
     return model_dict
 
-def train_model(model_dict, dataloaders, optimizer, criterion, num_epochs=25, device='gpu'):
+def train_model(model_dict, dataloaders, all_accuracy, all_losses, optimizer, criterion, num_epochs=25, device='gpu'):
     since = time.time()
 
-    accuracies = {'train':[], 'valid':[]}
-    losses = {'train':[], 'valid':[]}
 
     for epoch in range(num_epochs):
         print('Epoch {}/{}'.format(epoch, num_epochs - 1))
         print('-' * 10)
-
         # Each epoch has a training and validation phase
         #for phase in ['train', 'valid']:
         for phase in ['valid', 'train']:
+            large_seen =  small_seen = 0
             print('starting %s'%phase)
             model_dict = set_model_mode(model_dict, phase)
             large_running_loss = small_running_loss = 0.0
@@ -65,11 +63,13 @@ def train_model(model_dict, dataloaders, optimizer, criterion, num_epochs=25, de
                 optimizer.zero_grad()
                 # forward
                 with torch.set_grad_enabled(phase == 'train'):
-                    # Get model outputs and calculate loss
+                    # Get large model output
                     large_outputs = model_dict['large'](inputs)
-                    pred_large = torch.argmax(large_outputs, dim=1)
-
-                    pred_small = pred_large==small_class_idx
+                    # get predictions from softmax
+                    large_predictions = torch.argmax(large_outputs, dim=1)
+                    # determine where the large model predicted the label to
+                    # belong in a small class
+                    pred_small = [x for x in range(large_predictions.shape[0]) if large_predictions[x]==small_class_idx or large_class_num[x]==small_class_idx or random_state.rand()<.15]
                     pred_small_inputs = inputs[pred_small]
                     pred_small_class_num = small_class_num[pred_small]
                     small_outputs = model_dict['small'](pred_small_inputs)
@@ -79,7 +79,7 @@ def train_model(model_dict, dataloaders, optimizer, criterion, num_epochs=25, de
                     small_loss = criterion(small_outputs, pred_small_class_num)
                     loss = large_loss + small_loss
 
-                    _, small_preds = torch.max(small_outputs, 1)
+                    _, small_predictions = torch.max(small_outputs, 1)
                     large_seen += large_outputs.shape[0]
                     small_seen += small_outputs.shape[0]
 
@@ -90,31 +90,28 @@ def train_model(model_dict, dataloaders, optimizer, criterion, num_epochs=25, de
 
                 # statistics
                 n_batches += 1
-                large_running_loss += large_loss.item() * inputs.shape[0]
-                large_running_corrects += torch.sum(pred_large == large_class_num.data).cpu().numpy()
-                small_running_loss += small_loss.item() * pred_small_inputs.shape[0]
-                small_running_corrects += torch.sum(pred_small == small_class_num[pred_small].data).cpu().numpy()
+                large_running_loss += large_loss * inputs.shape[0]
+                large_running_corrects += torch.sum(large_predictions == large_class_num.data).cpu().numpy()
+                small_running_loss += small_loss * pred_small_inputs.shape[0]
+                small_running_corrects += torch.sum(small_predictions == small_class_num[pred_small].data).cpu().numpy()
 
             large_epoch_loss = large_running_loss.item() / large_seen
-            large_epoch_acc = large_running_corrects.double().cpu().numpy() / large_seen
+            large_epoch_acc = large_running_corrects / large_seen
             small_epoch_loss = small_running_loss.item() / small_seen
-            small_epoch_acc = small_running_corrects.double().cpu().numpy() / small_seen
-
+            small_epoch_acc = small_running_corrects / small_seen
 
             print('LARGE {} Loss: {:.4f} Acc: {:.4f}'.format(phase, large_epoch_loss, large_epoch_acc))
             print('SMALL {} Loss: {:.4f} Acc: {:.4f}'.format(phase, small_epoch_loss, small_epoch_acc))
             print('used %s batches for calculation'%n_batches)
-            accuracies['large_'+phase].append(large_epoch_acc)
-            losses['large_'+phase].append(large_epoch_loss)
-            accuracies['small_'+phase].append(small_epoch_acc)
-            losses['small_'+phase].append(small_epoch_loss)
+            all_accuracy['large_'+phase].append(large_epoch_acc)
+            all_losses['large_'+phase].append(large_epoch_loss)
+            all_accuracy['small_'+phase].append(small_epoch_acc)
+            all_losses['small_'+phase].append(small_epoch_loss)
 
     time_elapsed = time.time() - since
     print('Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
-    print('Best val Acc: {:4f}'.format(best_acc))
-
     ## load best model weights
-    return model_dict, optimizer, accuracies, losses
+    return model_dict, optimizer, all_accuracy, all_losses
 
 if __name__ == '__main__':
     load_model = ''
@@ -138,18 +135,18 @@ if __name__ == '__main__':
     valid_ds = UVPDataset(csv_file=os.path.join('experiments', name, 'valid.csv'), seed=334, valid=True, classes=class_names, weights=class_weights)
     #train_weighted_sampler = torch.utils.data.sampler.WeightedRandomSampler(torch.FloatTensor(train_ds.img_weights), len(train_ds), replacement=True)
     #valid_weighted_sampler = torch.utils.data.sampler.WeightedRandomSampler(torch.FloatTensor(valid_ds.img_weights), len(valid_ds), replacement=True)
-    train_weighted_sampler = torch.utils.data.sampler.WeightedRandomSampler(torch.FloatTensor(train_ds.img_weights), len(train_ds), replacement=False)
-    valid_weighted_sampler = torch.utils.data.sampler.WeightedRandomSampler(torch.FloatTensor(valid_ds.img_weights), len(valid_ds), replacement=False)
+    train_sampler = torch.utils.data.sampler.WeightedRandomSampler(torch.FloatTensor(train_ds.img_weights), len(train_ds), replacement=False)
+    valid_sampler = torch.utils.data.sampler.WeightedRandomSampler(torch.FloatTensor(valid_ds.img_weights), len(valid_ds), replacement=False)
     train_dl = torch.utils.data.DataLoader(
             train_ds,
             batch_size=batch_size,
-            sampler=train_weighted_sampler,
+            sampler=train_sampler,
             num_workers=4,
         )
     valid_dl = torch.utils.data.DataLoader(
             valid_ds,
             batch_size=batch_size,
-            sampler=valid_weighted_sampler,
+            sampler=valid_sampler,
             num_workers=2,
         )
     dataloaders = {'train':train_dl, 'valid':valid_dl}
@@ -235,10 +232,6 @@ if __name__ == '__main__':
         cpath = os.path.join(write_dir, 'ckptwt_eval%05d.pt'%len(all_losses['large_train']))
         print("saving model", cpath)
         torch.save(pp, cpath)
-        model_dict, optimizer, accuracies, losses = train_model(model_dict, dataloaders, optimizer, criterion, num_epochs=num_epochs_bt_saves, device=device)
-        for phase in all_accuracy.keys():
-            all_accuracy[phase].extend(accuracies[phase])
-        for phase in all_losses.keys():
-            all_losses[phase].extend(losses[phase])
+        model_dict, optimizer, all_accuracy, all_losses = train_model(model_dict, dataloaders, all_accuracy, all_losses, optimizer, criterion, num_epochs=num_epochs_bt_saves, device=device)
 
 
