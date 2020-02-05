@@ -22,3 +22,18 @@ Download images and tsv files from private data source into UVP_data_folder. Zip
 
 # 
 
+### TODO
+double check loading  
+fix labels according to RL input
+make global config file  
+combine model to output  
+write tsv file  
+figure out what ecotaxa is doing  
+add in vertical profiles  
+sampling issue?   
+add top-1 and top-5 errors
+try CB Focal and 320x320 size, zoom, no-zoom
+do hierarchical, so even imbalanced classes will come together
+try focal-loss
+look at other datasets
+

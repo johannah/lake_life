@@ -25,7 +25,15 @@ def set_parameter_requires_grad(model, feature_extracting):
         for param in model.parameters():
             param.requires_grad = False
 
-def train_model(model, dataloaders, optimizer, criterion, num_epochs=25, device='gpu'):
+def set_model_mode(model_dict, phase):
+    for name in model_dict.keys():
+        if phase == 'train':
+            model_dict[name].train()
+        else:
+            model_dict[name].eval()
+    return model_dict
+
+def train_model(model_dict, dataloaders, optimizer, criterion, num_epochs=25, device='gpu'):
     since = time.time()
 
     accuracies = {'train':[], 'valid':[]}
@@ -41,29 +49,25 @@ def train_model(model, dataloaders, optimizer, criterion, num_epochs=25, device=
         # Each epoch has a training and validation phase
         #for phase in ['train', 'valid']:
         for phase in ['valid', 'train']:
+            model_dict = set_model_mode(model_dict, phase)
             model.train()  # Set model to training mode
-#            if phase == 'train':
-#                model.train()  # Set model to training mode
-#            else:
-#                model.eval()   # Set model to evaluate mode
-#
             running_loss = 0.0
             running_corrects = 0
-
             n_batches = 0
             # Iterate over data.
             for data in dataloaders[phase]:
-                inputs, class_num, class_name, filepath, label_num, label_name, idx = data
+                inputs, class_num, large_class_num, small_class_num, filepath, idx = data
                 inputs = inputs.to(device)
-                class_num = class_num.to(device)
+                large_class_num = large_class_num.to(device)
+                small_class_num = small_class_num.to(device)
                 # zero the parameter gradients
                 optimizer.zero_grad()
-
                 # forward
                 with torch.set_grad_enabled(phase == 'train'):
                     # Get model outputs and calculate loss
-                    outputs = model(inputs)
-                    loss = criterion(outputs, class_num)
+                    large_outputs = model_dict['large'](inputs)
+                    large_loss = criterion(large_outputs, large_class_num)
+                    embed()
 
                     _, preds = torch.max(outputs, 1)
 
@@ -143,6 +147,8 @@ if __name__ == '__main__':
     batch_size = 64
     train_ds = UVPDataset(csv_file=os.path.join('experiments', name, 'train.csv'), seed=34, valid=False, small=small)
     class_names = train_ds.classes
+    large_class_names = train_ds.large_classes
+    small_class_names = train_ds.small_classes
     class_counts = train_ds.class_counts
     class_weights = train_ds.weights
     valid_ds = UVPDataset(csv_file=os.path.join('experiments', name, 'valid.csv'), seed=334, valid=True, classes=class_names, weights=class_weights, small=small)
@@ -163,9 +169,11 @@ if __name__ == '__main__':
     dataloaders = {'train':train_dl, 'valid':valid_dl}
 
     # Load the pretrained model from pytorch
-    rmodel = torchvision.models.resnet50(pretrained=True)
+    large_model = torchvision.models.resnet50(pretrained=True)
+    small_model = torchvision.models.resnet50(pretrained=True)
     # Number of classes in the dataset
-    num_classes = len(class_names)
+    large_num_classes = len(large_class_names)
+    small_num_classes = len(small_class_names)
 
     # Number of epochs to train for
     num_epochs = 35
@@ -176,30 +184,20 @@ if __name__ == '__main__':
     # print(rmodel)
     # last layer: (fc): Linear(in_features=2048, out_features=1000, bias=True)
     # need to reshape
-    rmodel.fc = nn.Linear(2048, num_classes)
-    rmodel.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+    large_model.fc = nn.Linear(2048, large_num_classes)
+    large_model.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+    small_model.fc = nn.Linear(2048, small_num_classes)
+    small_model.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print('using', device)
-    rmodel = rmodel.to(device)
+    model_dict = {'large':large_model, 'small':small_model}
 
     # Gather the parameters to be optimized/updated in this run. If we are
     #  finetuning we will be updating all parameters. However, if we are
     #  doing feature extract method, we will only update the parameters
     #  that we have just initialized, i.e. the parameters with requires_grad
     #  is True.
-    params_to_update = rmodel.parameters()
-    #print("Params to learn:")
-    #if feature_extract:
-    #    params_to_update = []
-    #    for name,param in rmodel.named_parameters():
-    #        if param.requires_grad == True:
-    #            params_to_update.append(param)
-    #            print('update', "\t",name)
-    #else:
-    #    for name,param in rmodel.named_parameters():
-    #        if param.requires_grad == True:
-    #            print('do not update', "\t",name)
-
+    params_to_update = list(large_model.parameters()) + list(small_model.paramters)
     # Observe that all parameters are being optimized
     optimizer = optim.Adam(params_to_update, lr=1e-4)
 
@@ -211,16 +209,16 @@ if __name__ == '__main__':
     if not os.path.exists(write_dir):
         os.makedirs(write_dir)
 
-    all_accuracy = {'train':[], 'valid':[]}
-    all_losses = {'train':[], 'valid':[]}
+    all_accuracy = {'large_train':[], 'large_valid':[], 'small_train':[], 'small_valid':[]}
+    all_losses = {'large_train':[], 'large_valid':[], 'small_train':[], 'small_valid':[]}
     cnt_start = 0
     epoch_cnt = 0
     best_model_wts = None
     if load_model != '':
         print('--------------------loading from %s'%load_model)
         save_dict = torch.load(load_model)
-        rmodel.load_state_dict(save_dict['state_dict'])
-        rmodel.to(device)
+        for name in model_dict.keys():
+            model_dict[name].load_state_dict[name]
         cnt_start = int(save_dict['cnt'])
         print("starting from cnt", cnt_start)
         best_model_wts = save_dict['best_model_wts']
@@ -234,10 +232,12 @@ if __name__ == '__main__':
         except:
             print('could not load opt state dict')
 
+    for name in model_dict.keys():
+        model_dict.to(device)
     for cnt in range(cnt_start, cnt_start+1000):
         # Train and evaluate
         print("starting cnt sequence", cnt)
-        pp = {'state_dict':rmodel.state_dict(),
+        pp = {
               'opt':optimizer.state_dict(),
               'accuracy':all_accuracy,
               'loss':all_losses,
@@ -246,11 +246,13 @@ if __name__ == '__main__':
               'num_epochs_bt_saves':num_epochs_bt_saves,
               'epoch_cnt': epoch_cnt,
                }
+        for name in model_dict.keys():
+            state_dict[name] = model_dict[name].state_dict()
 
         cpath = os.path.join(write_dir, 'ckptwt_eval%05d.pth'%len(all_losses['train']))
         print("saving model", cpath)
         torch.save(pp, cpath)
-        rmodel, optimizer, accuracies, losses, best_model_wts = train_model(rmodel, dataloaders, optimizer, criterion, num_epochs=num_epochs_bt_saves, device=device)
+        model_dict, optimizer, accuracies, losses, best_model_wts = train_model(model_dict, dataloaders, optimizer, criterion, num_epochs=num_epochs_bt_saves, device=device)
         for phase in all_accuracy.keys():
             all_accuracy[phase].extend(accuracies[phase])
         for phase in all_losses.keys():

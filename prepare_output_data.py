@@ -53,7 +53,7 @@ def load_training_files(exp_name):
     return all_data
 
 def get_images(datadir, labeled_data, exp_data):
-    output_csv = os.path.join(datadir, 'output_summary_class.csv')
+    output_csv = os.path.join(datadir, 'output_summary.csv')
     if not os.path.exists(output_csv):
         # we know the label for these images
         labeled_data.index = np.arange(labeled_data.shape[0])
@@ -90,7 +90,7 @@ def get_images(datadir, labeled_data, exp_data):
 
         print(exp_cnt, ll_cnt)
         outpd = pd.DataFrame(np.array(output), columns=['file', 'class_label', 'label', 'experiment_index', 'summary_index'])
-        outpd.to_csv(output_csv, sep=',')
+        outpd.to_csv(output_csv, sep=',', index=False)
         embed()
     else:
         outpd = pd.read_csv(output_csv)
