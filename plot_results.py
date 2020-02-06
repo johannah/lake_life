@@ -17,8 +17,8 @@ from imageio import imread
 #
 from sklearn.metrics import confusion_matrix
 from sklearn.utils.multiclass import unique_labels
-from ecotaxa_dataloader import EcotaxaDataset
-from uvp_dataloader import UVPDataset
+from utils import get_model, get_dataset, set_model_mode
+from train import forward_pass
 np.set_printoptions(precision=2)
 
 def plot_confusion_matrix(y_true, y_pred, classes,
@@ -88,13 +88,11 @@ def plot_error(iinput, img_filename, label, predicted, filename, suptitle):
     plt.savefig(filename.replace('.jpg', '_P%s_T%s.png'%(class_names[predicted], class_names[label])))
     plt.close()
 
-def evaluate_model(model, dataloaders, basename=''):
+def evaluate_model(model_dict, dataloaders, basename='', device='cpu'):
     #model.eval()
     model.train()
     cnt = 0
     for phase in ['valid', 'train']:
-    #for phase in ['valid']:
-    #for phase in ['train']:
         with torch.no_grad():
             error_dir = os.path.join(basename, phase)
             if not os.path.exists(error_dir):
@@ -105,22 +103,21 @@ def evaluate_model(model, dataloaders, basename=''):
             error_preds = []
             y_true = []
             y_pred = []
-
             cnt = 0
             for data in dataloaders[phase]:
-                 #inputs, labels, img_path, class_name, didx
-                 inputs, class_num, class_name, filepath, label_num, label_name, idx = data
-                 inputs = inputs.to(device)
+                belongs_in_small_class_idx = dataloaders[phase+'_large_wrong_class_idx']
+                inputs, class_num, large_class_num, small_class_num, filepath, idx = data
+                out = forward_pass(model_dict, inputs, large_class_num, small_class_num, belongs_in_small_class_idx, device, belongs_in_small_class_idx)
+                model_dict, large_outputs, small_outputs, pred_small_class_num, large_predictions, small_predictions  = out
 
-                 class_num = class_num.to(device)
-                 outputs = model(inputs)
-                 _, preds = torch.max(outputs, 1)
-                 llist = list(class_num.detach().numpy())
-                 lpred = list(preds.detach().numpy())
 
-                 y_true.extend(llist)
-                 y_pred.extend(lpred)
 
+#                 llist = list(class_num.detach().numpy())
+#                 lpred = list(preds.detach().numpy())
+#
+#                 y_true.extend(llist)
+#                 y_pred.extend(lpred)
+#
                  ### keep track of everything we got wrong
                  # ninputs = inputs.detach().numpy()
                  #wrong_inds = [ind for ind,(lp,l) in enumerate(zip(lpred, llist)) if not lp==l]
@@ -134,101 +131,58 @@ def evaluate_model(model, dataloaders, basename=''):
                  #        error_labels.append(llist[wi])
                  #        error_preds.append(lpred[wi])
                  #        #print(llist[wi], lpred[wi], outputs[wi])
-                 cnt+=inputs.shape[0]
-                 print(cnt)
-                 if cnt > 1000:
-                     break
+#                 cnt+=inputs.shape[0]
+#                 print(cnt)
+#                 if cnt > 1000:
+#                     break
+#
+#        # Plot non-normalized confusion matrix
+#        plot_confusion_matrix(y_true, y_pred, classes=class_names,
+#                              title='Confusion matrix, without normalization',
+#                              filename=basename+'_'+phase+'_'+'unnormalized_confusion.png')
+#
+#        # Plot normalized confusion matrix
+#        plot_confusion_matrix(y_true, y_pred, classes=class_names, normalize=True,
+#                              title='Normalized confusion matrix',
+#                              filename=basename+'_'+phase+'_'+'normalized_confusion.png')
+#
 
-        # Plot non-normalized confusion matrix
-        plot_confusion_matrix(y_true, y_pred, classes=class_names,
-                              title='Confusion matrix, without normalization',
-                              filename=basename+'_'+phase+'_'+'unnormalized_confusion.png')
-
-        # Plot normalized confusion matrix
-        plot_confusion_matrix(y_true, y_pred, classes=class_names, normalize=True,
-                              title='Normalized confusion matrix',
-                              filename=basename+'_'+phase+'_'+'normalized_confusion.png')
-
-
-def load_latest_checkpoint(loaddir='experiment_name', search='*.pth'):
+def find_latest_checkpoint(loaddir='experiment_name', search='*.pth'):
     search_path = os.path.join(loaddir, 'checkpoints', search)
     print("searching", search_path)
     search = sorted(glob(search_path))
     print('found %s checkpoints'%len(search))
     ckpt = search[-1]
     print('loading %s' %ckpt)
-    return ckpt, torch.load(ckpt, map_location=lambda storage, loc: storage)
+    return ckpt
 
 def plot_history(history_dict, filename):
-    try:
-        # old code saved as pt
-        history_dict['valid'] = np.array([x.cpu().numpy() for x in history_dict['valid']])
-        history_dict['train'] = np.array([x.cpu().numpy() for x in history_dict['train']])
-    except:
-        pass
-    plt.figure()
-    _ind1 = np.argmax(history_dict['valid'])
-    _ind2 = np.argmin(history_dict['valid'])
-    rs = [history_dict['valid'][_ind1], history_dict['valid'][_ind2]]
-    plt.plot(history_dict['train'], label='train')
-    plt.plot(history_dict['valid'], label='valid')
-    plt.scatter([_ind1, _ind2], rs, marker='x', s=30)
-    plt.title('Max Accuracy:%.03f CKPT:%s' %(history_dict['valid'][_ind1], _ind1))
+    for key in sorted(history_dict.keys()):
+        _amax = np.argmax(history_dict[key])
+        _amin = np.argmax(history_dict[key])
+        rs = [history_dict[key][_amax], history_dict[key][_amin]]
+        plt.plot(history_dict[key], label=key)
+        plt.scatter([_amax, _amin], rs, marker='x', s=30)
     plt.legend()
     plt.savefig(filename)
     plt.close()
 
 if __name__ == '__main__':
-    #exp_name = 'uvp_big_1000small_noliving_rotate_other_bg0'
-    exp_name = 'uvp_big_1000small_noliving_rotate_bg0_trim_combine_new'
-    exp_path = os.path.join('experiments', exp_name)
-    print(sys.argv)
-    if len(sys.argv)>1:
-        search  = sys.argv[1]
+    # can give model or checkpoints dir to search for model in
+    use_dir = sys.argv[-1]
+    if not use_dir.split('.')[-1] == '.pt':
+        load_path = sorted(glob(os.path.join(use_dir, '**.pt')))[-1]
     else:
-        search = '*.pth'
-    ckpt_name, ckpt_dict = load_latest_checkpoint(exp_path, search)
-    bname = ckpt_name.replace('.pth', '')
-    datadir = './'
-    plot_history(ckpt_dict['loss'], bname+'_loss.png')
-    plot_history(ckpt_dict['accuracy'], bname+'_accuracy.png')
-    batch_size = 32
-    train_ds = UVPDataset(csv_file=os.path.join(exp_path, 'train.csv'), seed=34, valid=True)
-    class_names = train_ds.classes
-    class_weights = train_ds.weights
-    valid_ds = UVPDataset(csv_file=os.path.join(exp_path, 'valid.csv'), seed=334, classes=class_names, weights=class_weights, valid=True)
-    train_dl = torch.utils.data.DataLoader(
-            train_ds,
-            batch_size=batch_size,
-            shuffle=True, num_workers=1
-        )
-    valid_dl = torch.utils.data.DataLoader(
-            valid_ds,
-            batch_size=batch_size,
-            shuffle=True, num_workers=1
-        )
-    dataloaders = {'train':train_dl, 'valid':valid_dl}
-    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    device = 'cpu'
+        load_path = use_dir
+    checkpoints_dir = os.path.split(load_path)[0]
+    exp_dir = os.path.split(checkpoints_dir)[0]
 
-    # Load the pretrained model from pytorch
-    rmodel = torchvision.models.resnet50(pretrained=True).to(device)
-
-    # Number of classes in the dataset
-    num_classes = len(class_names)
-
-    # Flag for feature extracting. When False, we finetune the whole model,
-    #   when True we only update the reshaped layer params
-    feature_extract = False
-    # print(rmodel)
-    # last layer: (fc): Linear(in_features=2048, out_features=1000, bias=True)
-    # need to reshape
-    rmodel.fc = nn.Linear(2048, num_classes)
-    rmodel.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
-    print('using', device)
-    print("loading state dict")
-    rmodel.load_state_dict(ckpt_dict['state_dict'])
-    del ckpt_dict
-    rmodel = rmodel.to(device)
-    evaluate_model(rmodel, dataloaders, bname)
+    dataloaders, large_class_names, small_class_names = get_dataset(exp_dir, 64)
+    large_num_classes = len(large_class_names)
+    small_num_classes = len(small_class_names)
+    model_dict, cnt_start, epoch_cnt, all_accuracy, all_losses = get_model(load_path, large_num_classes, small_num_classes, 'cpu')
+    bname = load_path.replace('.pt', '')
+    plot_history(all_losses, bname+'_loss.png')
+    plot_history(all_accuracy, bname+'_accuracy.png')
+    evaluate_model(model_dict, dataloaders, bname)
 

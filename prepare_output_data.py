@@ -11,13 +11,13 @@ import pandas as pd
 from collections import Counter
 from imageio import imread
 from IPython import embed
+from comfig import data_dir, exp_name, exp_dir
 
 random_state = np.random.RandomState(394)
 """
 find out which files were used in tsv so we know the label
 full image path,target,label
 """
-
 
 def load_dataset_files(datadir):
     # each UVP folder has a subdir then another dir w/ tsv file
@@ -82,11 +82,11 @@ def get_images(datadir, labeled_data, exp_data):
                 # TODO - add class label
                 output.append([jpg,  exp_class, label, exp_index, index])
                 ll_cnt +=1
-                # reduce search 
+                # reduce search
                 labeled_jpgs.pop(index)
             else:
                 ul_cnt +=1
-                output.append([jpg, 'unk', 'unk', 'unk', 'unk']) 
+                output.append([jpg, 'unk', 'unk', 'unk', 'unk'])
 
         print(exp_cnt, ll_cnt)
         outpd = pd.DataFrame(np.array(output), columns=['file', 'class_label', 'label', 'experiment_index', 'summary_index'])

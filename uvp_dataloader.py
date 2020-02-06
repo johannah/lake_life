@@ -181,7 +181,6 @@ class UVPDataset(Dataset):
             image = imread(filepath)[:,:,0]
         except:
             print("unable to load file", filepath)
-            embed()
             return self.__getitem__(self.random_state.randint(0, self.__len__()))
         # images have an annotation that gives the "1 mm" scale of the image
         hh,ww = image.shape
