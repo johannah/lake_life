@@ -84,7 +84,7 @@ class_rules = {
         'other<plastic': 'not-living', # 11
         'othertocheck': '', #80488,
         'part<Copepoda': 'part<other', #293,
-        'part<other': '',
+        'part<other': 'p',
         'seaweed': '', #207,
         'volvoxlike': 'Volvox', #1936
         }
@@ -162,7 +162,7 @@ def write_data_file(file_path, rows):
     [f.write(row+'\n') for row in rows]
     f.close()
 
-def make_train_test_split(df, exp_name, counts):
+def make_train_test_split(df, exp_name):
     many_inds = np.array(df.index)
     random_state.shuffle(many_inds)
     n_valid = int(many_inds.shape[0]*.12)
@@ -179,11 +179,7 @@ def make_train_test_split(df, exp_name, counts):
             print("could not find image file:", file_path)
             embed()
         dclass = df.loc[cnt, 'class']
-        if counts.loc['all', dclass] < 1000:
-            label = 'small_class'
-        else:
-            label = 'large_class'
-        line = '%d,%s,%s,%s'%(cnt, dclass, label, file_path)
+        line = '%d,%s,%s'%(cnt, dclass, file_path)
         # we need at least one example of each
         if dclass not in valid_class_count_dict.keys():
             valid_class_count_dict[dclass] = 1
@@ -194,14 +190,13 @@ def make_train_test_split(df, exp_name, counts):
         else:
             train_rows.append(line)
 
-    write_data_file(os.path.join('experiments', exp_name, 'valid.csv'), valid_rows)
-    write_data_file(os.path.join('experiments', exp_name, 'train.csv'), train_rows)
+    write_data_file(os.path.join(exp_dir, 'valid.csv'), valid_rows)
+    write_data_file(os.path.join(exp_dir, 'train.csv'), train_rows)
 
 if __name__ == '__main__':
     # each UVP folder has a subdir then another dir w/ tsv file
-    exp_name = 'uvp_warmup'
-    data_dir = './data/UVP_data_folder/'
+    from config import exp_dir, data_dir
     summary_path = os.path.join(data_dir, 'data_summary.tsv')
     summary, all_categories = load_tsv_files(data_dir, summary_path)
     summary, all_categories = load_tsv_files(data_dir, summary_path)
-    make_train_test_split(summary, exp_name, all_categories)
+    make_train_test_split(summary, exp_dir)

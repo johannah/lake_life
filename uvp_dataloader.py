@@ -24,9 +24,6 @@ class UVPDataset(Dataset):
         self.img_cnts = []
         self.img_filepaths = []
         self.img_classes = []
-        self.img_categories = []
-        self.img_small_classes = []
-        self.img_large_classes = []
         self.random_state = np.random.RandomState(seed)
         # load file data
         self.input_size = 224
@@ -35,19 +32,11 @@ class UVPDataset(Dataset):
         f = open(csv_file, 'r')
         for line in f.readlines():
             ll = line.strip().split(',')
-            self.img_cnts = ll[0]
             dclass = ll[1]
-            class_size = ll[2]
-
-            self.img_classes.append(dclass)
-            self.img_filepaths.append(ll[3])
-            self.img_categories.append(class_size)
-            if class_size == 'large_class':
-                self.img_large_classes.append(dclass)
-                self.img_small_classes.append('wrong_class_size')
-            else:
-                self.img_small_classes.append(dclass)
-                self.img_large_classes.append('wrong_class_size')
+            if dclass != 'none':
+                self.img_cnts = ll[0]
+                self.img_classes.append(dclass)
+                self.img_filepaths.append(ll[2])
 
         # TODO - find actual mean/std
         print("dataset has %s examples" %len(self.img_classes))
@@ -69,14 +58,15 @@ class UVPDataset(Dataset):
                  ]
         self.transforms = torchvision.transforms.Compose(func_transforms)
         self.indexes = np.arange(len(self.img_filepaths))
-        self.classes = sorted(list(set(self.img_classes)))
-        self.large_classes = sorted(list(set(self.img_large_classes)))
-        self.small_classes = sorted(list(set(self.img_small_classes)))
+        # https://pytorch.org/docs/stable/_modules/torch/nn/modules/adaptive.html#AdaptiveLogSoftmaxWithLoss
+        # when using adaptive loss - largest classes should have the lowest
+        # class index
         self.find_class_counts()
         if weights == '':
             print('finding weights')
             self.find_class_weights()
         else:
+            print('using provided weights')
             self.weights=weights
 
         print('finding class indexes')
@@ -114,15 +104,25 @@ class UVPDataset(Dataset):
         return len(self.img_filepaths)
 
     def find_class_counts(self):
-        print('finding class counts')
+        classes = sorted(list(set(self.img_classes)))
         class_counts = []
-        for c in self.classes:
+        for c in classes:
             class_counts.append(np.where(np.array(self.img_classes)==c)[0].shape[0])
-        self.class_counts = np.array(class_counts)
+        class_counts = np.array(class_counts)
+        # unsorted class counts which are associated with the class names - now
+        # sort them from most populous to least
+        sorted_zipped_class_counts = [(x,y) for x,y in sorted(zip(class_counts, classes), reverse=True)]
+        # now separate them
+        print('loaded classes')
+        [print(x) for x in sorted_zipped_class_counts]
+        self.class_counts = np.array([a for a,b in sorted_zipped_class_counts])
+        self.classes = [b for a,b in sorted_zipped_class_counts]
+        self.class_nums = [x for x in range(len(self.classes))]
+        self.total_samples = np.sum(self.class_counts)
 
     def find_class_weights(self):
-        # prevent 0 weight on any by adding .2
-        self.weights = 1.0/self.class_counts
+        # make sampling infrequent classes more likely
+        self.weights = 1-(self.class_counts/self.total_samples)
 
     def rotate_image(self, image, max_angle, center):
         angle = self.random_state.randint(-max_angle, max_angle)
@@ -171,11 +171,7 @@ class UVPDataset(Dataset):
     def __getitem__(self, idx):
         filepath = self.img_filepaths[idx]
         class_name = self.img_classes[idx]
-        large_class_name = self.img_large_classes[idx]
-        small_class_name = self.img_small_classes[idx]
         class_num = self.classes.index(class_name)
-        large_class_num = self.large_classes.index(large_class_name)
-        small_class_num = self.small_classes.index(small_class_name)
         try:
             #print(idx, filepath, class_name, label)
             image = imread(filepath)[:,:,0]
@@ -197,15 +193,16 @@ class UVPDataset(Dataset):
         image = self.trim(image, 0)
         # normalize between 0 and 1 seems to hurt
         timage = self.transforms(image)
-        return timage, class_num, large_class_num, small_class_num, filepath, idx
+        return timage, class_num, filepath, idx
 
 if __name__ == '__main__':
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    from config import exp_dir
     rs = np.random.RandomState(3)
-    bdir = 'experiments/uvp_warmup'
-    train_ds = UVPDataset(csv_file=os.path.join(bdir,'valid.csv'), seed=34)
+    #train_ds = UVPDataset(csv_file=os.path.join(exp_dir,'valid.csv'), seed=34)
+    train_ds = UVPDataset(csv_file=os.path.join(exp_dir,'train.csv'), seed=34)
     #valid_ds = EcotaxaDataset(csv_file='valid.csv', seed=334, classes=class_names, weights=class_weights)
     class_names = train_ds.classes
     class_weights = train_ds.weights
@@ -218,7 +215,7 @@ if __name__ == '__main__':
         #for i in range(len(ds[phase])):
         indexes = rs.choice(np.arange(len(ds[phase])), 100000)
         for i in indexes:
-            image, class_num, large_class_num, small_class_num, filepath, idx = ds[phase][i]
+            image, class_num, filepath, idx = ds[phase][i]
             #if label_name in ['copepoda', 'seaweed']:
             if 1:
                 imo = imread(filepath)
@@ -228,7 +225,7 @@ if __name__ == '__main__':
                 ax[1].imshow(imo[:,:,0])
                 img_name = os.path.split(filepath)[1]
                 ax[0].set_title("%s" %(train_ds.classes[class_num]))
-                ax[1].set_title("%s %s" %(train_ds.large_classes[large_class_num], train_ds.small_classes[small_class_num]))
+                #ax[1].set_title("%s %s" %(train_ds.large_classes[large_class_num], train_ds.small_classes[small_class_num]))
                 outpath = os.path.join(phase, img_name)
                 print(outpath)
                 plt.savefig(outpath)
