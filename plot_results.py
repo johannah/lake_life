@@ -89,9 +89,9 @@ def plot_error(iinput, img_filename, label, predicted, filename, suptitle):
     plt.close()
 
 def evaluate_model(model_dict, dataloaders, basename='', device='cpu'):
-    #model.eval()
-    model.train()
     cnt = 0
+    model_dict = set_model_mode(model_dict, 'eval')
+    #for phase in ['valid', 'train']:
     for phase in ['valid', 'train']:
         with torch.no_grad():
             error_dir = os.path.join(basename, phase)
@@ -104,47 +104,73 @@ def evaluate_model(model_dict, dataloaders, basename='', device='cpu'):
             y_true = []
             y_pred = []
             cnt = 0
+            num_large_classes = len(dataloaders['train'].dataset.large_classes)-1 # -1 for the wrong_class_size class
+            class_names = dataloaders['train'].dataset.large_classes[:-1] +  dataloaders['train'].dataset.small_classes
+
+            # TODOOOOOO it takes forever to load train phase - something is hosed
+            print("starting phase", phase)
             for data in dataloaders[phase]:
-                belongs_in_small_class_idx = dataloaders[phase+'_large_wrong_class_idx']
-                inputs, class_num, large_class_num, small_class_num, filepath, idx = data
-                out = forward_pass(model_dict, inputs, large_class_num, small_class_num, belongs_in_small_class_idx, device, belongs_in_small_class_idx)
-                model_dict, large_outputs, small_outputs, pred_small_class_num, large_predictions, small_predictions  = out
+                print('evaluating', phase, cnt)
+                if cnt > 10000:
+                    break
+                else:
+                    belongs_in_small_class_idx = dataloaders[phase+'_large_wrong_class_idx']
+                    inputs, class_num, large_class_num, small_class_num, filepath, idx = data
+                    out = forward_pass(model_dict, inputs, large_class_num, small_class_num, belongs_in_small_class_idx, device, phase='eval')
+                    model_dict, large_outputs, small_outputs, _,  pred_small_class_num, large_predictions, small_predictions, pred_small, some_small  = out
+                    # large_class_num[pred_small] should ideally ==  belongs_in_small_class_idx
+                    true_class_num = []
+                    pred_class_num = []
+                    lpred = list(large_predictions.detach().numpy())
+                    small_class_num = small_class_num.cpu().numpy()
+                    large_class_num = large_class_num.cpu().numpy()
+                    if some_small:
+                        spred = list(small_predictions.detach().numpy())
+                    else:
+                        spred = []
+                    for idx in range(len(lpred)):
+                        if lpred[idx] != belongs_in_small_class_idx:
+                            pred_class_num.append(lpred[idx])
+                        else:
+                            pred_class_num.append(spred.pop(0)+num_large_classes)
+                    for idx, cn in enumerate(large_class_num):
+                        if cn == belongs_in_small_class_idx:
+                            true_class_num.append(small_class_num[idx]+num_large_classes)
+                        else:
+                            true_class_num.append(cn)
+
+                    y_true.extend(true_class_num)
+                    y_pred.extend(pred_class_num)
+                    cnt +=len(pred_class_num)
 
 
-
-#                 llist = list(class_num.detach().numpy())
-#                 lpred = list(preds.detach().numpy())
-#
-#                 y_true.extend(llist)
-#                 y_pred.extend(lpred)
-#
-                 ### keep track of everything we got wrong
-                 # ninputs = inputs.detach().numpy()
-                 #wrong_inds = [ind for ind,(lp,l) in enumerate(zip(lpred, llist)) if not lp==l]
-                 ##if False:
-                 #if cnt < 200:
-                 #    for wi in wrong_inds:
-                 #        name = os.path.join(error_dir, 'C%05d_%02d'%(cnt,wi) + 'D%05d'%didx[wi] + os.path.split(img_path[wi])[1])
-                 #        plot_error(ninputs[wi,0], img_path[wi], llist[wi], lpred[wi], name, img_path[wi])
-                 #        error_inputs.append(ninputs[wi,0])
-                 #        error_filenames.append(img_path[wi])
-                 #        error_labels.append(llist[wi])
-                 #        error_preds.append(lpred[wi])
-                 #        #print(llist[wi], lpred[wi], outputs[wi])
-#                 cnt+=inputs.shape[0]
-#                 print(cnt)
-#                 if cnt > 1000:
-#                     break
+                     ### keep track of everything we got wrong
+                     # ninputs = inputs.detach().numpy()
+                     #wrong_inds = [ind for ind,(lp,l) in enumerate(zip(lpred, llist)) if not lp==l]
+                     ##if False:
+                     #if cnt < 200:
+                     #    for wi in wrong_inds:
+                     #        name = os.path.join(error_dir, 'C%05d_%02d'%(cnt,wi) + 'D%05d'%didx[wi] + os.path.split(img_path[wi])[1])
+                     #        plot_error(ninputs[wi,0], img_path[wi], llist[wi], lpred[wi], name, img_path[wi])
+                     #        error_inputs.append(ninputs[wi,0])
+                     #        error_filenames.append(img_path[wi])
+                     #        error_labels.append(llist[wi])
+                     #        error_preds.append(lpred[wi])
+                     #        #print(llist[wi], lpred[wi], outputs[wi])
+#                     cnt+=inputs.shape[0]
+#                     print(cnt)
+#                     if cnt > 1000:
+#                         break
 #
 #        # Plot non-normalized confusion matrix
-#        plot_confusion_matrix(y_true, y_pred, classes=class_names,
-#                              title='Confusion matrix, without normalization',
-#                              filename=basename+'_'+phase+'_'+'unnormalized_confusion.png')
-#
-#        # Plot normalized confusion matrix
-#        plot_confusion_matrix(y_true, y_pred, classes=class_names, normalize=True,
-#                              title='Normalized confusion matrix',
-#                              filename=basename+'_'+phase+'_'+'normalized_confusion.png')
+        plot_confusion_matrix(y_true, y_pred, classes=class_names,
+                              title='Confusion matrix, without normalization',
+                              filename=basename+'_'+phase+'_'+'unnormalized_confusion.png')
+
+        # Plot normalized confusion matrix
+        plot_confusion_matrix(y_true, y_pred, classes=class_names, normalize=True,
+                              title='Normalized confusion matrix',
+                              filename=basename+'_'+phase+'_'+'normalized_confusion.png')
 #
 
 def find_latest_checkpoint(loaddir='experiment_name', search='*.pth'):
@@ -177,12 +203,16 @@ if __name__ == '__main__':
     checkpoints_dir = os.path.split(load_path)[0]
     exp_dir = os.path.split(checkpoints_dir)[0]
 
-    dataloaders, large_class_names, small_class_names = get_dataset(exp_dir, 64)
+    dataloaders, large_class_names, small_class_names = get_dataset(exp_dir, 64, num_workers=1, evaluation=True)
     large_num_classes = len(large_class_names)
     small_num_classes = len(small_class_names)
     model_dict, cnt_start, epoch_cnt, all_accuracy, all_losses = get_model(load_path, large_num_classes, small_num_classes, 'cpu')
     bname = load_path.replace('.pt', '')
-    plot_history(all_losses, bname+'_loss.png')
-    plot_history(all_accuracy, bname+'_accuracy.png')
+    loss_path = bname+'_loss.png'
+    acc_path = bname+'_accuracy.png'
+    if not os.path.exists(loss_path):
+        plot_history(all_losses, loss_path)
+    if not os.path.exists(acc_path):
+        plot_history(all_accuracy, acc_path)
     evaluate_model(model_dict, dataloaders, bname)
 

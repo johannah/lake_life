@@ -19,7 +19,7 @@ use_gpu = torch.cuda.is_available()
 if use_gpu:
     print("Using CUDA")
 
-def forward_pass(model_dict, inputs, large_class_num, small_class_num, device, belongs_in_small_class_idx):
+def forward_pass(model_dict, inputs, large_class_num, small_class_num, belongs_in_small_class_idx, device, phase='train'):
     inputs = inputs.to(device)
     large_class_num = large_class_num.to(device)
     small_class_num = small_class_num.to(device)
@@ -29,16 +29,21 @@ def forward_pass(model_dict, inputs, large_class_num, small_class_num, device, b
     large_predictions = torch.argmax(large_outputs, dim=1)
     # determine where the large model predicted the label to
     # belong in a small class
-    pred_small = [x for x in range(large_predictions.shape[0]) if large_predictions[x]==belongs_in_small_class_idx or large_class_num[x]==belongs_in_small_class_idx or random_state.rand()<.15]
+    pred_small = []
+    if phase == 'train':
+        pred_small = [x for x in range(large_predictions.shape[0]) if large_predictions[x]==belongs_in_small_class_idx or large_class_num[x]==belongs_in_small_class_idx or random_state.rand()<.15]
+    else:
+        pred_small = [x for x in range(large_predictions.shape[0]) if large_predictions[x]==belongs_in_small_class_idx]
     if not len(pred_small):
-        # if no fit criteria  - put them all thru
-        pred_small = range(large_predictions.shape[0])
-    pred_small_inputs = inputs[pred_small]
-    pred_small_class_num = small_class_num[pred_small]
-    small_outputs = model_dict['small'](pred_small_inputs)
-    # determine where large model predicted the class was small
-    _, small_predictions = torch.max(small_outputs, 1)
-    return model_dict, large_outputs, small_outputs, pred_small_class_num, large_predictions, small_predictions
+        print('none pred small')
+        return model_dict, large_outputs, None, large_class_num, None, large_predictions, None, pred_small, False
+    else:
+        pred_small_inputs = inputs[pred_small]
+        pred_small_class_num = small_class_num[pred_small]
+        small_outputs = model_dict['small'](pred_small_inputs)
+        # determine where large model predicted the class was small
+        _, small_predictions = torch.max(small_outputs, 1)
+        return model_dict, large_outputs, small_outputs, large_class_num, pred_small_class_num, large_predictions, small_predictions, pred_small, True
 
 def train_model(model_dict, dataloaders, all_accuracy, all_losses, optimizer, criterion, num_epochs=25, device='gpu'):
     since = time.time()
@@ -62,15 +67,18 @@ def train_model(model_dict, dataloaders, all_accuracy, all_losses, optimizer, cr
                 optimizer.zero_grad()
                 # forward
                 with torch.set_grad_enabled(phase == 'train'):
-                    out = forward_pass(model_dict, inputs, large_class_num, small_class_num, belongs_in_small_class_idx, device, belongs_in_small_class_idx)
-                    model_dict, large_outputs, small_outputs, pred_small_class_num, large_predictions, small_predictions  = out
-                    #small_inputs
+                    out = forward_pass(model_dict, inputs, large_class_num, small_class_num, belongs_in_small_class_idx, device)
+                    model_dict, large_outputs, small_outputs, large_class_num, pred_small_class_num, large_predictions, small_predictions, pred_small, some_small  = out
+                    # large model
                     large_loss = criterion(large_outputs, large_class_num)
-                    small_loss = criterion(small_outputs, pred_small_class_num)
-                    loss = large_loss + small_loss
-
                     large_seen += large_outputs.shape[0]
-                    small_seen += small_outputs.shape[0]
+                    if some_small:
+                        #small_inputs
+                        small_loss = criterion(small_outputs, pred_small_class_num)
+                        loss = large_loss + small_loss
+                        small_seen += small_outputs.shape[0]
+                    else:
+                        loss = large_loss
 
                     # backward + optimize only if in training phase
                     if phase == 'train':
@@ -81,8 +89,8 @@ def train_model(model_dict, dataloaders, all_accuracy, all_losses, optimizer, cr
                 n_batches += 1
                 large_running_loss += large_loss * inputs.shape[0]
                 large_running_corrects += torch.sum(large_predictions == large_class_num.data).cpu().numpy()
-                small_running_loss += small_loss * pred_small_inputs.shape[0]
-                small_running_corrects += torch.sum(small_predictions == small_class_num[pred_small].data).cpu().numpy()
+                small_running_loss += small_loss * pred_small_class_num.shape[0]
+                small_running_corrects += np.sum(small_predictions.cpu().numpy() == small_class_num[pred_small].cpu().numpy())
 
             large_epoch_loss = large_running_loss.item() / large_seen
             large_epoch_acc = large_running_corrects / large_seen
@@ -113,7 +121,7 @@ if __name__ == '__main__':
     #name = 'uvp_big_1000small_noliving_rotate_other_bg0'
     name = 'uvp_warmup'
     datadir = './'
-    batch_size = 64
+    batch_size = 32
     # Number of epochs to train for
     num_epochs = 35
 
