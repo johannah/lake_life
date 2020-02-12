@@ -88,7 +88,7 @@ def plot_error(iinput, img_filename, label, predicted, filename, suptitle):
     plt.savefig(filename.replace('.jpg', '_P%s_T%s.png'%(class_names[predicted], class_names[label])))
     plt.close()
 
-def evaluate_model(model_dict, dataloaders, basename='', device='cpu'):
+def evaluate_model(model_dict, dataloaders, class_names, basename='', device='cpu'):
     cnt = 0
     model_dict = set_model_mode(model_dict, 'eval')
     #for phase in ['valid', 'train']:
@@ -104,46 +104,17 @@ def evaluate_model(model_dict, dataloaders, basename='', device='cpu'):
             y_true = []
             y_pred = []
             cnt = 0
-            num_large_classes = len(dataloaders['train'].dataset.large_classes)-1 # -1 for the wrong_class_size class
-            class_names = dataloaders['train'].dataset.large_classes[:-1] +  dataloaders['train'].dataset.small_classes
-
-            # TODOOOOOO it takes forever to load train phase - something is hosed
             print("starting phase", phase)
             for data in dataloaders[phase]:
                 print('evaluating', phase, cnt)
                 if cnt > 10000:
                     break
                 else:
-                    belongs_in_small_class_idx = dataloaders[phase+'_large_wrong_class_idx']
-                    inputs, class_num, large_class_num, small_class_num, filepath, idx = data
-                    out = forward_pass(model_dict, inputs, large_class_num, small_class_num, belongs_in_small_class_idx, device, phase='eval')
-                    model_dict, large_outputs, small_outputs, _,  pred_small_class_num, large_predictions, small_predictions, pred_small, some_small  = out
-                    # large_class_num[pred_small] should ideally ==  belongs_in_small_class_idx
-                    true_class_num = []
-                    pred_class_num = []
-                    lpred = list(large_predictions.detach().numpy())
-                    small_class_num = small_class_num.cpu().numpy()
-                    large_class_num = large_class_num.cpu().numpy()
-                    if some_small:
-                        spred = list(small_predictions.detach().numpy())
-                    else:
-                        spred = []
-                    for idx in range(len(lpred)):
-                        if lpred[idx] != belongs_in_small_class_idx:
-                            pred_class_num.append(lpred[idx])
-                        else:
-                            pred_class_num.append(spred.pop(0)+num_large_classes)
-                    for idx, cn in enumerate(large_class_num):
-                        if cn == belongs_in_small_class_idx:
-                            true_class_num.append(small_class_num[idx]+num_large_classes)
-                        else:
-                            true_class_num.append(cn)
-
-                    y_true.extend(true_class_num)
-                    y_pred.extend(pred_class_num)
-                    cnt +=len(pred_class_num)
-
-
+                    images, class_num, filepath, idx = data
+                    model_dict, class_num, predictions, loss = forward_pass(model_dict, images, class_num, device)
+                    y_true.extend(list(class_num.detach().cpu().numpy()))
+                    y_pred.extend(list(predictions.detach().cpu().numpy()))
+                    cnt +=len(class_num)
                      ### keep track of everything we got wrong
                      # ninputs = inputs.detach().numpy()
                      #wrong_inds = [ind for ind,(lp,l) in enumerate(zip(lpred, llist)) if not lp==l]
@@ -195,6 +166,7 @@ def plot_history(history_dict, filename):
 
 if __name__ == '__main__':
     # can give model or checkpoints dir to search for model in
+    device = 'cuda'
     use_dir = sys.argv[-1]
     if not use_dir.split('.')[-1] == '.pt':
         load_path = sorted(glob(os.path.join(use_dir, '**.pt')))[-1]
@@ -203,10 +175,9 @@ if __name__ == '__main__':
     checkpoints_dir = os.path.split(load_path)[0]
     exp_dir = os.path.split(checkpoints_dir)[0]
 
-    dataloaders, large_class_names, small_class_names = get_dataset(exp_dir, 64, num_workers=1, evaluation=True)
-    large_num_classes = len(large_class_names)
-    small_num_classes = len(small_class_names)
-    model_dict, cnt_start, epoch_cnt, all_accuracy, all_losses = get_model(load_path, large_num_classes, small_num_classes, 'cpu')
+    dataloaders, class_names = get_dataset(exp_dir, 64, num_workers=1, evaluation=True)
+    num_classes = len(class_names)
+    model_dict, cnt_start, epoch_cnt, all_accuracy, all_losses = get_model(load_path, num_classes, 512, device)
     bname = load_path.replace('.pt', '')
     loss_path = bname+'_loss.png'
     acc_path = bname+'_accuracy.png'
@@ -214,5 +185,5 @@ if __name__ == '__main__':
         plot_history(all_losses, loss_path)
     if not os.path.exists(acc_path):
         plot_history(all_accuracy, acc_path)
-    evaluate_model(model_dict, dataloaders, bname)
+    evaluate_model(model_dict, dataloaders, class_names, bname, device)
 

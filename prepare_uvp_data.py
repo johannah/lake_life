@@ -79,12 +79,12 @@ class_rules = {
         'living': 'none', # 504  RL - don't use this!
         'multiple<Copepoda': 'multiple<other', #73,
         'multiple<other': '', #341,
-        'not-living': '', #4,
+        'not-living': 'none', #4,
         'other<living': '', #41111,
-        'other<plastic': 'not-living', # 11
+        'other<plastic': 'none', # 11
         'othertocheck': '', #80488,
         'part<Copepoda': 'part<other', #293,
-        'part<other': 'p',
+        'part<other': '',
         'seaweed': '', #207,
         'volvoxlike': 'Volvox', #1936
         }
