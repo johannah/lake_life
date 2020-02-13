@@ -89,11 +89,22 @@ def plot_error(iinput, img_filename, label, predicted, filename, suptitle):
     plt.savefig(filename.replace('.jpg', '_P%s_T%s.png'%(class_names[predicted], class_names[label])))
     plt.close()
 
+def write_results(basename, phase, idxs, class_names, y_true, y_pred):
+    ''' idxs is idx into tsv file ''''
+    path = basename+'_'+phase+'_'+'predictions.csv'
+    print('writing', rpath)
+    fo = open(rpath, 'w')
+    fo.write('idx,true_name,true_num,pred_name,pred_num\n')
+    for line in range(len(idxs)):
+        fo.write('%s,%s,%s,%s,%s\n'%(idxs[line], class_names[y_true[line]], y_true[line],
+                                           class_names[y_pred[line]], y_pred[line]))
+    fo.close()
+
 def evaluate_model(model_dict, dataloaders, class_names, basename='', device='cpu'):
     cnt = 0
     model_dict = set_model_mode(model_dict, 'eval')
-    #for phase in ['valid', 'train']:
-    for phase in ['valid', 'train']:
+    results = {}
+    for phase in ['train']:
         with torch.no_grad():
             error_dir = os.path.join(basename, phase)
             if not os.path.exists(error_dir):
@@ -119,25 +130,9 @@ def evaluate_model(model_dict, dataloaders, class_names, basename='', device='cp
                     y_pred.extend(list(predictions.detach().cpu().numpy()))
                     idxs.extend(list(class_num.detach().cpu().numpy()))
                     cnt +=len(class_num)
+        write_results(basename, phase, idxs, class_names, y_true, y_pred)
+    return class_names, y_true, y_pred
 
-        rpath = basename+'_'+phase+'_'+'predictions.csv'
-        print('writing', rpath)
-        fo = open(rpath, 'w')
-        fo.write('idx,true_name,true_num,pred_name,pred_num\n')
-        for line in range(len(idxs)):
-            fo.write('%s,%s,%s,%s,%s\n'%(idxs[line], class_names[y_true[line]], y_true[line],
-                                               class_names[y_pred[line]], y_pred[line]))
-        fo.close()
-        print('plotting confusion matrices')
-        # TODO - load from file
-        # Plot non-normalized confusion matrix
-        plot_confusion_matrix(y_true, y_pred, classes=class_names,
-                              filename=basename+'_'+phase+'_'+'unnormalized_confusion.png')
-
-        # Plot normalized confusion matrix
-        plot_confusion_matrix(y_true, y_pred, classes=class_names, normalize=True,
-                              filename=basename+'_'+phase+'_'+'normalized_confusion.png')
-#
 
 def find_latest_checkpoint(loaddir='experiment_name', search='*.pth'):
     search_path = os.path.join(loaddir, 'checkpoints', search)
@@ -180,5 +175,16 @@ if __name__ == '__main__':
         plot_history(all_losses, loss_path)
     if not os.path.exists(acc_path):
         plot_history(all_accuracy, acc_path)
-    evaluate_model(model_dict, dataloaders, class_names, bname, device)
+
+    class_names, y_true, y_pred = evaluate_model(model_dict, dataloaders, class_names, bname, device)
+    print('plotting confusion matrices')
+    # TODO - load from file
+    # Plot non-normalized confusion matrix
+    plot_confusion_matrix(y_true, y_pred, classes=class_names,
+                          filename=basename+'_'+phase+'_'+'unnormalized_confusion.png')
+
+    # Plot normalized confusion matrix
+    plot_confusion_matrix(y_true, y_pred, classes=class_names, normalize=True,
+                          filename=basename+'_'+phase+'_'+'normalized_confusion.png')
+#
 

@@ -11,6 +11,7 @@ import pandas as pd
 from collections import Counter
 from imageio import imread
 from IPython import embed
+from config import exp_dir, data_dir, train_data_dir, test_data_dir
 
 random_state = np.random.RandomState(394)
 
@@ -87,18 +88,19 @@ class_rules = {
         'part<other': '',
         'seaweed': '', #207,
         'volvoxlike': 'Volvox', #1936
+        'none':'none'
         }
 
 
-def load_tsv_files(data_dir, summary_path="data/UVP_data_folder/summary_path.tsv"):
+def load_tsv_files(search_dir, summary_path="data/UVP_data_folder/summary_path.tsv"):
     """
     create (or load) a summary tsv file that encapsulates the entire dataset
     follow the rules in class_rules to combine or trash particular classes
     """
-    data_labels = sorted(glob(os.path.join(data_dir, '**', '*.tsv'), recursive=True))
-    print('found %s tsv files' %len(data_labels))
+    search = os.path.join(search_dir, '**', '*.tsv')
+    data_labels = sorted(glob(search, recursive=True))
+    print('found %s tsv files in %s' %(len(data_labels), search))
     cat_path = summary_path.replace('.tsv', '_counts.tsv')
-    embed()
     if not os.path.exists(summary_path):
         file_categories_dict = {'all':{}}
         for i in range(len(data_labels)):
@@ -121,6 +123,8 @@ def load_tsv_files(data_dir, summary_path="data/UVP_data_folder/summary_path.tsv
             fp.loc[:,'dir_name'] = os.path.split(data_labels[i])[0]
             # get counts for each type of label in this tsv file
 
+            if 'object_annotation_category' in fp.columns:
+                fp['object_annotation_category'] = 'none'
             object_classes = fp['object_annotation_category']
             refined_object_classes = []
             for name in object_classes:
@@ -143,14 +147,15 @@ def load_tsv_files(data_dir, summary_path="data/UVP_data_folder/summary_path.tsv
               dd = fp
             else:
               dd = dd.append(fp)
+        print('creating summary tsv files')
         dd.loc[:,'num'] = range(dd.shape[0])
         dd.to_csv(summary_path, sep=',', header=True)
         file_categories = pd.DataFrame.from_dict(file_categories_dict, orient='index')
         file_categories.to_csv(cat_path, sep=',', header=True)
         # this returns wrong, but load is fine
-    else:
-        dd = pd.read_csv(summary_path, sep=',')
-        file_categories = pd.read_csv(cat_path, sep=',', index_col=0)
+    print('loading summary tsv files')
+    dd = pd.read_csv(summary_path, sep=',')
+    file_categories = pd.read_csv(cat_path, sep=',', index_col=0)
     print(file_categories.loc['all'])
     return dd, file_categories
 
@@ -169,56 +174,52 @@ def get_line(cnt, dclass, file_path):
 
 def make_test_file(df):
     many_inds = np.array(df.index)
+    # only include if it is predicted
+    status = df['object_annotation_status']
+    many_inds = [cnt for cnt in many_inds if status[cnt] == 'predicted']
+    print('found %s test data points none of which were labeled'%len(many_inds))
     random_state.shuffle(many_inds)
     rows = []
     for cnt in many_inds:
-        file_path = os.path.abspath(os.path.join(df.loc[cnt, 'dir_name'], df.loc[cnt, 'img_file_name']))
-        if not os.path.exists(file_path):
-            print("could not find image file:", file_path)
-            embed()
-        dclass = df.loc[cnt, 'class']
-        line = get_line(cnt,dclass,file_path)
-        rows.append(line)
+        if df.loc[cnt, 'object_annotation_status'] != 'predicted':
+            file_path = os.path.abspath(os.path.join(df.loc[cnt, 'dir_name'], df.loc[cnt, 'img_file_name']))
+            if not os.path.exists(file_path):
+                print("could not find image file:", file_path)
+                embed()
+            else:
+                dclass = df.loc[cnt, 'class']
+                line = get_line(cnt,dclass,file_path)
+                rows.append(line)
     write_data_file(os.path.join(exp_dir, 'test.csv'), rows)
 
-def make_train_valid_split(df, exp_name):
+def make_train_file(df, exp_name):
     many_inds = np.array(df.index)
+    # only include if label is known (not predicted)
+    status = df['object_annotation_status']
+    many_inds = [cnt for cnt in many_inds if status[cnt] != 'predicted']
+    print('found %s data points which were labeled'%len(many_inds))
     random_state.shuffle(many_inds)
-    n_valid = int(many_inds.shape[0]*.05)
-    valid_class_count_dict = {}
-    valid_inds = many_inds[:n_valid]
     train_rows = []
-    valid_rows = []
     for cnt in many_inds:
-        file_path = os.path.abspath(os.path.join(df.loc[cnt, 'dir_name'], df.loc[cnt, 'img_file_name']))
-        if not os.path.exists(file_path):
-            print("could not find image file:", file_path)
-            embed()
-        dclass = df.loc[cnt, 'class']
-        line = get_line(cnt,dclass,file_path)
-        # we need at least one example of each
-        if dclass not in valid_class_count_dict.keys():
-            valid_class_count_dict[dclass] = 1
-            valid_rows.append(line)
-        elif cnt in valid_inds:
-            valid_rows.append(line)
-            valid_class_count_dict[dclass] += 1
-        else:
-            train_rows.append(line)
-
-    write_data_file(os.path.join(exp_dir, 'valid.csv'), valid_rows)
+        if df.loc[cnt, 'object_annotation_status'] != 'predicted':
+            dclass = df.loc[cnt, 'class']
+            file_path = os.path.abspath(os.path.join(df.loc[cnt, 'dir_name'], df.loc[cnt, 'img_file_name']))
+            if not os.path.exists(file_path):
+                print("could not find image file:", file_path)
+                embed()
+            else:
+                line = get_line(cnt,dclass,file_path)
+                # we need at least one example of each
+                train_rows.append(line)
     write_data_file(os.path.join(exp_dir, 'train.csv'), train_rows)
 
 if __name__ == '__main__':
     # each UVP folder has a subdir then another dir w/ tsv file
-    from config import exp_dir, data_dir
-    #summary_path = os.path.join(data_dir, 'data_summary.tsv')
-    #summary, all_categories = load_tsv_files(data_dir, summary_path)
-    #summary, all_categories = load_tsv_files(data_dir, summary_path)
-    #make_train_valid_split(summary, exp_dir)
+    summary_path = os.path.join(train_data_dir, 'data_summary.tsv')
+    summary, all_categories = load_tsv_files(train_data_dir, summary_path)
+    make_train_file(summary, exp_dir)
 
-    test_data_dir = os.path.join(data_dir, 'test_data')
     test_summary_path = os.path.join(test_data_dir, 'test_data_summary.tsv')
     # wont have true
     summary, all_categories = load_tsv_files(test_data_dir, test_summary_path)
-    make_test_file(summary)
+    make_test_file(test_summary)

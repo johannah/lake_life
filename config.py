@@ -31,6 +31,9 @@ exp_dir = os.path.join('experiments', exp_name)
 base_data_dir = 'data'
 uvp_data_dir = 'UVP_data_folder'
 data_dir = os.path.join(base_data_dir, uvp_data_dir)
+test_data_dir = os.path.join(data_dir, 'test_data')
+train_data_dir = os.path.join(data_dir, 'train_data')
+
 mkdirs = [data_dir, exp_dir]
 for mdir in mkdirs:
     if not os.path.exists(mdir):
