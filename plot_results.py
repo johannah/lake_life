@@ -15,7 +15,7 @@ from imageio import imread
 # make histogram plot
 # train on everything
 #
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, accuracy_score
 from sklearn.utils.multiclass import unique_labels
 from utils import get_model, get_dataset, set_model_mode
 from train import forward_pass
@@ -30,11 +30,12 @@ def plot_confusion_matrix(y_true, y_pred, classes,
     Normalization can be applied by setting `normalize=True`.
     """
     print("starting plotting confusion", filename)
+    acc = accuracy_score(y_true, y_pred)
     if not title:
         if normalize:
-            title = 'Normalized confusion matrix'
+            title = 'Normalized Acc %.02f'%acc
         else:
-            title = 'Confusion matrix, without normalization'
+            title = 'Acc %.02f'%acc
 
     # Compute confusion matrix
     cm = confusion_matrix(y_true, y_pred)
@@ -104,43 +105,37 @@ def evaluate_model(model_dict, dataloaders, class_names, basename='', device='cp
             y_true = []
             y_pred = []
             cnt = 0
+            idxs = []
             print("starting phase", phase)
             for data in dataloaders[phase]:
                 print('evaluating', phase, cnt)
-                if cnt > 10000:
-                    break
-                else:
+                if True:
+                ##if cnt > 200000:
+                #    continue
+                #else:
                     images, class_num, filepath, idx = data
                     model_dict, class_num, predictions, loss = forward_pass(model_dict, images, class_num, device)
                     y_true.extend(list(class_num.detach().cpu().numpy()))
                     y_pred.extend(list(predictions.detach().cpu().numpy()))
+                    idxs.extend(list(class_num.detach().cpu().numpy()))
                     cnt +=len(class_num)
-                     ### keep track of everything we got wrong
-                     # ninputs = inputs.detach().numpy()
-                     #wrong_inds = [ind for ind,(lp,l) in enumerate(zip(lpred, llist)) if not lp==l]
-                     ##if False:
-                     #if cnt < 200:
-                     #    for wi in wrong_inds:
-                     #        name = os.path.join(error_dir, 'C%05d_%02d'%(cnt,wi) + 'D%05d'%didx[wi] + os.path.split(img_path[wi])[1])
-                     #        plot_error(ninputs[wi,0], img_path[wi], llist[wi], lpred[wi], name, img_path[wi])
-                     #        error_inputs.append(ninputs[wi,0])
-                     #        error_filenames.append(img_path[wi])
-                     #        error_labels.append(llist[wi])
-                     #        error_preds.append(lpred[wi])
-                     #        #print(llist[wi], lpred[wi], outputs[wi])
-#                     cnt+=inputs.shape[0]
-#                     print(cnt)
-#                     if cnt > 1000:
-#                         break
-#
-#        # Plot non-normalized confusion matrix
+
+        rpath = basename+'_'+phase+'_'+'predictions.csv'
+        print('writing', rpath)
+        fo = open(rpath, 'w')
+        fo.write('idx,true_name,true_num,pred_name,pred_num\n')
+        for line in range(len(idxs)):
+            fo.write('%s,%s,%s,%s,%s\n'%(idxs[line], class_names[y_true[line]], y_true[line],
+                                               class_names[y_pred[line]], y_pred[line]))
+        fo.close()
+        print('plotting confusion matrices')
+        # TODO - load from file
+        # Plot non-normalized confusion matrix
         plot_confusion_matrix(y_true, y_pred, classes=class_names,
-                              title='Confusion matrix, without normalization',
                               filename=basename+'_'+phase+'_'+'unnormalized_confusion.png')
 
         # Plot normalized confusion matrix
         plot_confusion_matrix(y_true, y_pred, classes=class_names, normalize=True,
-                              title='Normalized confusion matrix',
                               filename=basename+'_'+phase+'_'+'normalized_confusion.png')
 #
 
