@@ -6,7 +6,6 @@ import os
 import sys
 from ecotaxa_dataloader import EcotaxaDataset
 from uvp_dataloader import UVPDataset
-from config import adaptive_sm_cutoffs
 from IPython import embed
 
 def set_parameter_requires_grad(model, feature_extracting):
@@ -23,6 +22,7 @@ def set_model_mode(model_dict, phase):
     return model_dict
 
 def get_model(model_path, num_classes, num_last_layer_features, device):
+    from config import adaptive_sm_cutoffs
     # Flag for feature extracting. When False, we finetune the whole model,
     #   when True we only update the reshaped layer params
     # feature_extract = False
@@ -57,8 +57,8 @@ def get_model(model_path, num_classes, num_last_layer_features, device):
         epoch_cnt = 0
     return model_dict, cnt_start, epoch_cnt, all_accuracy, all_losses
 
-def get_dataset(dataset_base_path, batch_size, num_workers=4, evaluation=False, limit=1e6):
-    train_ds = UVPDataset(csv_file=os.path.join(dataset_base_path, 'train.csv'), seed=34, valid=False, limit=limit)
+def get_dataset(dataset_base_path, batch_size, num_workers=4, evaluation=False, limit=1e6, img_size=225):
+    train_ds = UVPDataset(csv_file=os.path.join(dataset_base_path, 'train.csv'), seed=34, valid=False, limit=limit, img_size=img_size)
     class_names = train_ds.classes
     #class_weights = train_ds.weights
     #valid_ds = UVPDataset(csv_file=os.path.join(dataset_base_path, 'valid.csv'), seed=334, valid=True, classes=class_names, weights=class_weights)

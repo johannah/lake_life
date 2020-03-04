@@ -14,7 +14,8 @@ from copy import deepcopy
 from PIL import Image, ImageChops
 
 class UVPDataset(Dataset):
-    def __init__(self, csv_file, seed, classes='', labels='', weights='', valid=False, run_mean=0, run_std=0, find_class_counts=True, limit=1e10):
+    def __init__(self, csv_file, seed, classes='', labels='', weights='', valid=False,
+                 run_mean=0, run_std=0, find_class_counts=True, limit=1e10, img_size=224):
         #run_mean=0.9981, run_std=.0160):
         """
         Args:
@@ -27,7 +28,7 @@ class UVPDataset(Dataset):
         self.img_classes = []
         self.random_state = np.random.RandomState(seed)
         # load file data
-        self.input_size = 224
+        self.input_size = img_size
         print('loading csv:%s'%csv_file)
         assert os.path.exists(csv_file); # csv file given doesnt exist
         f = open(csv_file, 'r')
@@ -206,10 +207,10 @@ if __name__ == '__main__':
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    from config import exp_dir
+    from config import exp_dir, img_size
     rs = np.random.RandomState(3)
     #train_ds = UVPDataset(csv_file=os.path.join(exp_dir,'valid.csv'), seed=34)
-    train_ds = UVPDataset(csv_file=os.path.join(exp_dir,'train.csv'), seed=34)
+    train_ds = UVPDataset(csv_file=os.path.join(exp_dir,'train.csv'), seed=34, img_size=img_size)
     #valid_ds = EcotaxaDataset(csv_file='valid.csv', seed=334, classes=class_names, weights=class_weights)
     class_names = train_ds.classes
     class_weights = train_ds.weights
@@ -217,8 +218,9 @@ if __name__ == '__main__':
     ds = {'train':train_ds}
     #for phase in ds.keys():
     for phase in ds.keys():
-        if not os.path.exists(phase):
-            os.makedirs(phase)
+        exdir = os.path.join(exp_dir, 'example_images', phase)
+        if not os.path.exists(exdir):
+            os.makedirs(exdir)
         #for i in range(len(ds[phase])):
         indexes = rs.choice(np.arange(len(ds[phase])), 100000)
         for i in indexes:
@@ -233,7 +235,7 @@ if __name__ == '__main__':
                 img_name = os.path.split(filepath)[1]
                 ax[0].set_title("%s" %(train_ds.classes[class_num]))
                 #ax[1].set_title("%s %s" %(train_ds.large_classes[large_class_num], train_ds.small_classes[small_class_num]))
-                outpath = os.path.join(phase, img_name)
+                outpath = os.path.join(exdir, img_name)
                 print(outpath)
                 plt.savefig(outpath)
                 plt.close()
