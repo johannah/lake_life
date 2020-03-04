@@ -90,8 +90,8 @@ def plot_error(iinput, img_filename, label, predicted, filename, suptitle):
     plt.close()
 
 def write_results(basename, phase, idxs, class_names, y_true, y_pred):
-    ''' idxs is idx into tsv file ''''
-    path = basename+'_'+phase+'_'+'predictions.csv'
+    ''' idxs is idx into tsv file '''
+    rpath = basename+'_'+phase+'_'+'predictions.csv'
     print('writing', rpath)
     fo = open(rpath, 'w')
     fo.write('idx,true_name,true_num,pred_name,pred_num\n')
@@ -103,16 +103,11 @@ def write_results(basename, phase, idxs, class_names, y_true, y_pred):
 def evaluate_model(model_dict, dataloaders, class_names, basename='', device='cpu'):
     cnt = 0
     model_dict = set_model_mode(model_dict, 'eval')
-    results = {}
     for phase in ['train']:
         with torch.no_grad():
             error_dir = os.path.join(basename, phase)
             if not os.path.exists(error_dir):
                 os.makedirs(error_dir)
-            error_inputs = []
-            error_filenames = []
-            error_labels = []
-            error_preds = []
             y_true = []
             y_pred = []
             cnt = 0
@@ -120,17 +115,21 @@ def evaluate_model(model_dict, dataloaders, class_names, basename='', device='cp
             print("starting phase", phase)
             for data in dataloaders[phase]:
                 print('evaluating', phase, cnt)
-                if True:
-                ##if cnt > 200000:
-                #    continue
-                #else:
-                    images, class_num, filepath, idx = data
-                    model_dict, class_num, predictions, loss = forward_pass(model_dict, images, class_num, device)
-                    y_true.extend(list(class_num.detach().cpu().numpy()))
-                    y_pred.extend(list(predictions.detach().cpu().numpy()))
-                    idxs.extend(list(class_num.detach().cpu().numpy()))
-                    cnt +=len(class_num)
+                images, class_num, filepath, idx = data
+                model_dict, class_num, predictions, loss = forward_pass(model_dict, images, class_num, device)
+                y_true.extend(list(class_num.detach().cpu().numpy()))
+                y_pred.extend(list(predictions.detach().cpu().numpy()))
+                idxs.extend(list(class_num.detach().cpu().numpy()))
+                cnt +=len(class_num)
         write_results(basename, phase, idxs, class_names, y_true, y_pred)
+        plot_confusion_matrix(y_true, y_pred, classes=class_names,
+                              filename=basename+'_'+phase+'_'+'unnormalized_confusion.png')
+
+        # Plot normalized confusion matrix
+        plot_confusion_matrix(y_true, y_pred, classes=class_names, normalize=True,
+                              filename=basename+'_'+phase+'_'+'normalized_confusion.png')
+#
+
     return class_names, y_true, y_pred
 
 
@@ -156,7 +155,9 @@ def plot_history(history_dict, filename):
 
 if __name__ == '__main__':
     # can give model or checkpoints dir to search for model in
+    #device = 'cpu'
     device = 'cuda'
+    limit = 500000
     use_dir = sys.argv[-1]
     if not use_dir.split('.')[-1] == '.pt':
         load_path = sorted(glob(os.path.join(use_dir, '**.pt')))[-1]
@@ -165,7 +166,7 @@ if __name__ == '__main__':
     checkpoints_dir = os.path.split(load_path)[0]
     exp_dir = os.path.split(checkpoints_dir)[0]
 
-    dataloaders, class_names = get_dataset(exp_dir, 64, num_workers=1, evaluation=True)
+    dataloaders, class_names = get_dataset(exp_dir, 64, num_workers=2, evaluation=True, limit=limit)
     num_classes = len(class_names)
     model_dict, cnt_start, epoch_cnt, all_accuracy, all_losses = get_model(load_path, num_classes, 512, device)
     bname = load_path.replace('.pt', '')
@@ -179,12 +180,4 @@ if __name__ == '__main__':
     class_names, y_true, y_pred = evaluate_model(model_dict, dataloaders, class_names, bname, device)
     print('plotting confusion matrices')
     # TODO - load from file
-    # Plot non-normalized confusion matrix
-    plot_confusion_matrix(y_true, y_pred, classes=class_names,
-                          filename=basename+'_'+phase+'_'+'unnormalized_confusion.png')
-
-    # Plot normalized confusion matrix
-    plot_confusion_matrix(y_true, y_pred, classes=class_names, normalize=True,
-                          filename=basename+'_'+phase+'_'+'normalized_confusion.png')
-#
-
+    # Plot non-normalized confusion matri
