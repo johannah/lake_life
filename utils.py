@@ -51,23 +51,23 @@ def get_model(model_path, num_classes, num_last_layer_features, device):
         epoch_cnt = len(all_losses['train'])
         print("have seen %s epochs"%epoch_cnt)
     else:
-        all_accuracy = {'train':[], 'valid':[]}
-        all_losses = {'train':[], 'valid':[]}
+        all_accuracy = {'train':[]}
+        all_losses = {'train':[]}
         cnt_start = 0
         epoch_cnt = 0
     return model_dict, cnt_start, epoch_cnt, all_accuracy, all_losses
 
-def get_dataset(dataset_base_path, batch_size, num_workers=4, evaluation=False):
-    train_ds = UVPDataset(csv_file=os.path.join(dataset_base_path, 'train.csv'), seed=34, valid=False)
+def get_dataset(dataset_base_path, batch_size, num_workers=4, evaluation=False, limit=1e6):
+    train_ds = UVPDataset(csv_file=os.path.join(dataset_base_path, 'train.csv'), seed=34, valid=False, limit=limit)
     class_names = train_ds.classes
-    class_weights = train_ds.weights
-    valid_ds = UVPDataset(csv_file=os.path.join(dataset_base_path, 'valid.csv'), seed=334, valid=True, classes=class_names, weights=class_weights)
+    #class_weights = train_ds.weights
+    #valid_ds = UVPDataset(csv_file=os.path.join(dataset_base_path, 'valid.csv'), seed=334, valid=True, classes=class_names, weights=class_weights)
 
     #train_weighted_sampler = torch.utils.data.sampler.WeightedRandomSampler(torch.FloatTensor(train_ds.img_weights), len(train_ds), replacement=True)
     #valid_weighted_sampler = torch.utils.data.sampler.WeightedRandomSampler(torch.FloatTensor(valid_ds.img_weights), len(valid_ds), replacement=True)
     # when evaluation - i want replacement = False
     train_sampler = torch.utils.data.sampler.WeightedRandomSampler(torch.FloatTensor(train_ds.img_weights), len(train_ds), replacement=not evaluation)
-    valid_sampler = torch.utils.data.sampler.WeightedRandomSampler(torch.FloatTensor(valid_ds.img_weights), len(valid_ds), replacement=not evaluation)
+    #valid_sampler = torch.utils.data.sampler.WeightedRandomSampler(torch.FloatTensor(valid_ds.img_weights), len(valid_ds), replacement=not evaluation)
     #train_sampler = torch.utils.data.sampler.SubsetRandomSampler(indices=np.arange(len(train_ds)))
     #valid_sampler = torch.utils.data.sampler.SubsetRandomSampler(indices=np.arange(len(valid_ds)))
 
@@ -77,24 +77,25 @@ def get_dataset(dataset_base_path, batch_size, num_workers=4, evaluation=False):
             num_workers=num_workers,
             sampler=train_sampler,
         )
-    valid_dl = torch.utils.data.DataLoader(
-            valid_ds,
-            batch_size=batch_size,
-            num_workers=max([1, num_workers//2]),
-            sampler=valid_sampler,
-        )
+    #valid_dl = torch.utils.data.DataLoader(
+    #        valid_ds,
+    #        batch_size=batch_size,
+    #        num_workers=max([1, num_workers//2]),
+    #        sampler=valid_sampler,
+    #    )
 
-    dataloaders = {'train':train_dl, 'valid':valid_dl}
+    #dataloaders = {'train':train_dl, 'valid':valid_dl}
+    #dataloaders = {'train':train_dl, 'valid':valid_dl}
+    dataloaders = {'train':train_dl}
     return dataloaders, class_names
 
-def save_model(write_dir, cnt, model_dict, optimizer, all_accuracy, all_losses, num_epochs_bt_saves, epoch_cnt):
+def save_model(write_dir, cnt, model_dict, optimizer, all_accuracy, all_losses, epoch_cnt):
     print("starting cnt sequence", cnt)
     pp = {
           'opt':optimizer.state_dict(),
           'loss':all_losses,
           'accuracy':all_accuracy,
           'cnt':cnt,
-          'num_epochs_bt_saves':num_epochs_bt_saves,
           'epoch_cnt': epoch_cnt,
            }
     for name in model_dict.keys():

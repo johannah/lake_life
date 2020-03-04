@@ -92,15 +92,17 @@ class_rules = {
         }
 
 
-def load_tsv_files(search_dir, summary_path="data/UVP_data_folder/summary_path.tsv"):
+def load_tsv_files(search_dir, summary_path):
     """
-    create (or load) a summary tsv file that encapsulates the entire dataset
+    search_dir : dir to search for tsv files: eg data/UVP_data_folder/train_data/
+    create (or load) a summary csv file that encapsulates the entire dataset
     follow the rules in class_rules to combine or trash particular classes
+    summary_path - .csv location to store collation of all tsv files
     """
     search = os.path.join(search_dir, '**', '*.tsv')
     data_labels = sorted(glob(search, recursive=True))
     print('found %s tsv files in %s' %(len(data_labels), search))
-    cat_path = summary_path.replace('.tsv', '_counts.tsv')
+    cat_path = summary_path.replace('.csv', '_counts.csv')
     if not os.path.exists(summary_path):
         file_categories_dict = {'all':{}}
         for i in range(len(data_labels)):
@@ -123,7 +125,7 @@ def load_tsv_files(search_dir, summary_path="data/UVP_data_folder/summary_path.t
             fp.loc[:,'dir_name'] = os.path.split(data_labels[i])[0]
             # get counts for each type of label in this tsv file
 
-            if 'object_annotation_category' in fp.columns:
+            if 'object_annotation_category' not in fp.columns:
                 fp['object_annotation_category'] = 'none'
             object_classes = fp['object_annotation_category']
             refined_object_classes = []
@@ -147,7 +149,7 @@ def load_tsv_files(search_dir, summary_path="data/UVP_data_folder/summary_path.t
               dd = fp
             else:
               dd = dd.append(fp)
-        print('creating summary tsv files')
+        print('creating summary tsv file')
         dd.loc[:,'num'] = range(dd.shape[0])
         dd.to_csv(summary_path, sep=',', header=True)
         file_categories = pd.DataFrame.from_dict(file_categories_dict, orient='index')
@@ -177,7 +179,7 @@ def make_test_file(df):
     # only include if it is predicted
     status = df['object_annotation_status']
     many_inds = [cnt for cnt in many_inds if status[cnt] == 'predicted']
-    print('found %s test data points none of which were labeled'%len(many_inds))
+    print('found %s test data points which were NOT labeled for test set'%len(many_inds))
     random_state.shuffle(many_inds)
     rows = []
     for cnt in many_inds:
@@ -215,11 +217,11 @@ def make_train_file(df, exp_name):
 
 if __name__ == '__main__':
     # each UVP folder has a subdir then another dir w/ tsv file
-    summary_path = os.path.join(train_data_dir, 'data_summary.tsv')
+    summary_path = os.path.join(train_data_dir, 'data_summary.csv')
     summary, all_categories = load_tsv_files(train_data_dir, summary_path)
     make_train_file(summary, exp_dir)
 
-    test_summary_path = os.path.join(test_data_dir, 'test_data_summary.tsv')
+    test_summary_path = os.path.join(test_data_dir, 'test_data_summary.csv')
     # wont have true
-    summary, all_categories = load_tsv_files(test_data_dir, test_summary_path)
+    test_summary, all_categories = load_tsv_files(test_data_dir, test_summary_path)
     make_test_file(test_summary)

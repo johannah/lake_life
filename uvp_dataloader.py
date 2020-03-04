@@ -14,13 +14,14 @@ from copy import deepcopy
 from PIL import Image, ImageChops
 
 class UVPDataset(Dataset):
-    def __init__(self, csv_file, seed, classes='', labels='', weights='', valid=False, run_mean=0, run_std=0, find_class_counts=True):
+    def __init__(self, csv_file, seed, classes='', labels='', weights='', valid=False, run_mean=0, run_std=0, find_class_counts=True, limit=1e10):
         #run_mean=0.9981, run_std=.0160):
         """
         Args:
             csv_file (string): Path to the csv file with image paths and annotations.
 
         """
+        self.limit = limit
         self.img_cnts = []
         self.img_filepaths = []
         self.img_classes = []
@@ -30,16 +31,22 @@ class UVPDataset(Dataset):
         print('loading csv:%s'%csv_file)
         assert os.path.exists(csv_file); # csv file given doesnt exist
         f = open(csv_file, 'r')
-        for line in f.readlines():
-            ll = line.strip().split(',')
-            dclass = ll[1]
-            if dclass != 'none':
-                self.img_cnts = ll[0]
-                self.img_classes.append(dclass)
-                self.img_filepaths.append(ll[2])
+        cnt = 0
+        for line in f:
+            if cnt < self.limit:
+                ll = line.strip().split(',')
+                dclass = ll[1]
+                if dclass != 'none':
+                    cnt +=1
+                    self.img_cnts = ll[0]
+                    self.img_classes.append(dclass)
+                    self.img_filepaths.append(ll[2])
 
         # TODO - find actual mean/std
-        print("dataset has %s examples" %len(self.img_classes))
+        print("dataset has %s examples - limit is %s" %(len(self.img_classes), self.limit))
+        # warning - if we don't capture all classes in the limit - then we will
+        # not call the model correctly - should probably store the class_names
+        # and numbers when training the model
         if not valid:
             func_transforms = [
                 torchvision.transforms.ColorJitter(hue=.1, saturation=.1,
