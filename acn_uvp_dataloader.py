@@ -1,10 +1,6 @@
-from torch.utils.data import Dataset, DataLoader
 import PIL
 from PIL import Image
 import numpy as np
-import torchvision
-from torchvision import datasets, models, transforms
-import torch
 import os
 import sys
 from imageio import imread, imwrite
@@ -14,7 +10,7 @@ from skimage.feature import blob_doh
 from copy import deepcopy
 from PIL import Image, ImageChops
 
-class UVPDataset(Dataset):
+class UVPDataset():
     def __init__(self, csv_file, seed, classes='', labels='', weights='', valid=False,
                  run_mean=0, run_std=0, find_class_counts=True, limit=1e10, img_size=224):
         #run_mean=0.9981, run_std=.0160):
@@ -46,92 +42,10 @@ class UVPDataset(Dataset):
 
         # TODO - find actual mean/std
         print("dataset has %s examples - limit is %s" %(len(self.img_classes), self.limit))
-        # warning - if we don't capture all classes in the limit - then we will
-        # not call the model correctly - should probably store the class_names
-        # and numbers when training the model
-        #if not valid:
-        #    func_transforms = [
-        #        torchvision.transforms.ColorJitter(hue=.1, saturation=.1,
-        #                                           brightness=.1, contrast=.1),
-        #        # rotate looks bad when the critter is on the edge
-        #        #torchvision.transforms.RandomRotation(45, expand=False),
-        #        torchvision.transforms.Resize(size=(self.input_size, self.input_size)),
-        #        torchvision.transforms.RandomHorizontalFlip(),
-        #        transforms.RandomVerticalFlip(),
-        #        transforms.ToTensor(),
-        #         ]
-        #else:
-        #    func_transforms = [
-        #        torchvision.transforms.Resize(size=(self.input_size, self.input_size)),
-        #        transforms.ToTensor(),
-        #         ]
-        #self.transforms = torchvision.transforms.Compose(func_transforms)
         self.indexes = np.arange(len(self.img_filepaths))
-        # https://pytorch.org/docs/stable/_modules/torch/nn/modules/adaptive.html#AdaptiveLogSoftmaxWithLoss
-        # when using adaptive loss - largest classes should have the lowest
-        # class index
-        self.find_class_counts()
-        if weights == '':
-            print('finding weights')
-            self.find_class_weights()
-        else:
-            print('using provided weights')
-            self.weights=weights
-
-        print('finding class indexes')
-        self.img_class_nums = np.array([self.classes.index(c) for c in self.img_classes])
-        #self.img_label_names = [self.labels.index(l) for l in self.img_labels]
-        self.img_weights = self.weights[np.array(self.img_class_nums)]
-        print("CLASS WEIGHTS")
-        for cn, cc, cw in zip(self.classes, self.class_counts, self.weights):
-            print('class:%s counts:%s weight:%.03f'%(cn, cc, cw))
-
-        #if run_mean is None:
-        #     run_mean, run_std = self.find_mean_std()
-        #func_transforms.append(transforms.Normalize([run_mean], [run_std]))
-        #self.transforms = torchvision.transforms.Compose(func_transforms)
-
-    def find_mean_std(self):
-        limit = int(0.15*self.__len__())
-        print("finding mean/std on random %s images"%limit)
-        choices = self.random_state.choice(np.arange(self.__len__()), limit)
-        # hmm since my classes aren't balanced - this might be bad
-        run_mean = 0.0
-        run_std = 0.0
-        for c in choices:
-            r = self.__getitem__(c)
-            nonzero = r[0].numpy()
-            nonzero = nonzero[nonzero > 0]
-            run_mean += nonzero.mean()
-            run_std += nonzero.std()
-        run_mean/=float(limit)
-        run_std/=float(limit)
-        print('found mean/std', run_mean, run_std)
-        return run_mean, run_std
 
     def __len__(self):
         return len(self.img_filepaths)
-
-    def find_class_counts(self):
-        classes = sorted(list(set(self.img_classes)))
-        class_counts = []
-        for c in classes:
-            class_counts.append(np.where(np.array(self.img_classes)==c)[0].shape[0])
-        class_counts = np.array(class_counts)
-        # unsorted class counts which are associated with the class names - now
-        # sort them from most populous to least
-        sorted_zipped_class_counts = [(x,y) for x,y in sorted(zip(class_counts, classes), reverse=True)]
-        # now separate them
-        print('loaded classes')
-        [print(x) for x in sorted_zipped_class_counts]
-        self.class_counts = np.array([a for a,b in sorted_zipped_class_counts])
-        self.classes = [b for a,b in sorted_zipped_class_counts]
-        self.class_nums = [x for x in range(len(self.classes))]
-        self.total_samples = np.sum(self.class_counts)
-
-    def find_class_weights(self):
-        # make sampling infrequent classes more likely
-        self.weights = 1-(self.class_counts/self.total_samples)
 
     def rotate_image(self, image, max_angle=45):
         #, center):
@@ -203,14 +117,12 @@ class UVPDataset(Dataset):
 
     def __getitem__(self, idx):
         filepath = self.img_filepaths[idx]
-        class_name = self.img_classes[idx]
-        class_num = self.classes.index(class_name)
         try:
             #print(idx, filepath, class_name, label)
             image = imread(filepath)[:,:,0]
         except:
             print("unable to load file", filepath)
-            #return self.__getitem__(self.random_state.randint(0, self.__len__()))
+            return self.__getitem__(self.random_state.randint(0, self.__len__()))
         # images have an annotation that gives the "1 mm" scale of the image
         hh,ww = image.shape
         # remove label at bottom
@@ -223,10 +135,8 @@ class UVPDataset(Dataset):
         image = self.trim(image)
         image = self.downscale(image)
         image = self.add_padding(image)
-        print(image.shape)
         image = (2*(image.astype(np.float32)/255.))-1
-        timage = torch.FloatTensor(image[None])
-        return timage, class_num, filepath, idx
+        return image[None]
 
 if __name__ == '__main__':
     import matplotlib
@@ -246,9 +156,13 @@ if __name__ == '__main__':
         exdir = os.path.join(exp_dir, 'example_images', phase)
         if not os.path.exists(exdir):
             os.makedirs(exdir)
-        indexes = rs.choice(np.arange(len(ds[phase])), 10)
+        #indexes = rs.choice(np.arange(len(ds[phase])), 10)
+        indexes = np.arange(len(ds[phase]))
         for i in indexes:
             image, class_num, filepath, idx = ds[phase][i]
+            print(idx, image.min(), image.max())
+            assert image.min() >= -1
+            assert image.max() <= 1
             imo = imread(filepath)
             h,w,c = imo.shape
             f,ax = plt.subplots(1,2)

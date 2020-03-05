@@ -26,7 +26,7 @@ from utils import plot_example, plot_losses, count_parameters
 from utils import set_model_mode, kl_loss_function, write_log_files
 from utils import discretized_mix_logistic_loss, sample_from_discretized_mix_logistic
 from acn_models import tPTPriorNetwork, ACNVQVAEres
-from uvp_dataloader import UVPDataset
+from acn_uvp_dataloader import UVPDataset
 
 import torchvision
 from torchvision import datasets, models, transforms
@@ -114,9 +114,9 @@ def forward_pass(model_dict, images, index_indexes, phase, info):
     # prepare data in appropriate way
     bs,c,h,w = images.shape
     images = images.to(info['device'], non_blocking=True)
-    images = F.dropout(images, p=info['dropout_rate'], training=True, inplace=False)
+    vimages = F.dropout(images, p=info['dropout_rate'], training=phase=='train', inplace=False)
     # put action cond and reward cond in and project to same size as state
-    z, u_q = model_dict['vq_acn_model'](images)
+    z, u_q = model_dict['vq_acn_model'](vimages)
     u_q_flat = u_q.view(bs, info['code_length'])
     if phase == 'train':
         # check that we are getting what we think we are getting from the replay
@@ -129,6 +129,16 @@ def forward_pass(model_dict, images, index_indexes, phase, info):
     s_p = s_p.view(bs, 3, 8, 8)
     return model_dict, images, rec_dml, u_q, u_p, s_p, rec_dml, z_e_x, z_q_x, latents
 
+def make_batches(dataset, batch_size):
+    # shuffle indexes
+    indexes = np.arange(len(dataset))
+    random_state.shuffle(indexes)
+    batch_indexes_list = []
+    for st_in in np.arange(0, len(indexes), batch_size):
+        en_in = min([st_in+info['batch_size'], len(indexes)])
+        batch_indexes_list.append(indexes[np.arange(st_in, en_in)])
+    return batch_indexes_list
+
 def run(train_cnt, model_dict, data_dict, phase, info):
     st = time.time()
     loss_dict = {'running': 0,
@@ -138,21 +148,23 @@ def run(train_cnt, model_dict, data_dict, phase, info):
              'commit':0,
              'loss':0,
               }
-    #print('starting', phase, 'cuda', torch.cuda.memory_allocated(device=None))
-    data_loader = data_dict[phase]
-    #data_loader.reset_unique()
-    num_batches = len(data_loader)//info['batch_size']
+    dataset = data_dict[phase]
+    num_batches = len(dataset)//info['batch_size']
+    print(phase, 'num batches', num_batches)
     set_model_mode(model_dict, phase)
     torch.set_grad_enabled(phase=='train')
-    #while data_loader.unique_available:
     batch_cnt = 0
-    for data in data_loader:
+
+    batch_indexes_list = make_batches(dataset, info['batch_size'])
+    for batch_indexes in batch_indexes_list:
         for key in model_dict.keys():
             model_dict[key].zero_grad()
-        images, class_num, filepath, idx = data
-        fp_out = forward_pass(model_dict, images, idx, phase, info)
+        images = torch.stack([torch.FloatTensor(dataset[bi]) for bi in batch_indexes])
+        images = images.to(info['device'])
+        fp_out = forward_pass(model_dict, images, batch_indexes, phase, info)
         model_dict, images, rec_dml, u_q, u_p, s_p, rec_dml, z_e_x, z_q_x, latents = fp_out
         bs,c,h,w = images.shape
+
         if batch_cnt == 0:
             log_ones = torch.zeros(bs, info['code_length']).to(info['device'])
         if bs != log_ones.shape[0]:
@@ -176,19 +188,21 @@ def run(train_cnt, model_dict, data_dict, phase, info):
             loss.backward()
             model_dict['opt'].step()
             train_cnt+=bs
-        if batch_cnt == num_batches-3:
+        if batch_cnt == num_batches-1:
             # store example near end for plotting
             rec_yhat = sample_from_discretized_mix_logistic(rec_dml, info['nr_logistic_mix'], only_mean=info['sample_mean'], sampling_temperature=info['sampling_temperature'])
             example = {
-                       'target':images.detach().cpu(),
-                       'rec':rec_yhat.detach().cpu(),
+                       'target':images.detach().cpu().numpy(),
+                       'rec':rec_yhat.detach().cpu().numpy(),
                        }
+
         if not batch_cnt % 100:
             print(train_cnt, batch_cnt, account_losses(loss_dict))
             print(phase, 'cuda', torch.cuda.memory_allocated(device=None))
         batch_cnt+=1
 
     loss_avg = account_losses(loss_dict)
+    torch.cuda.empty_cache()
     print("finished %s after %s secs at cnt %s"%(phase,
                                                 time.time()-st,
                                                 train_cnt,
@@ -208,13 +222,12 @@ def train_acn(train_cnt, epoch_cnt, model_dict, data_dict, info, rescale_inv):
                                                 model_dict,
                                                 data_dict,
                                                 phase='train', info=info)
-            print(prof)
+
         epoch_cnt +=1
         train_cnt +=info['size_training_set']
         if not epoch_cnt % info['save_every_epochs'] or epoch_cnt == 1:
             # make a checkpoint
             print('starting valid phase')
-            #model_dict, data_dict, valid_loss_avg, valid_example = run(train_cnt,
             valid_loss_avg, valid_example = run(train_cnt,
                                                  model_dict,
                                                  data_dict,
@@ -230,11 +243,9 @@ def train_acn(train_cnt, epoch_cnt, model_dict, data_dict, info, rescale_inv):
             state_dict = {}
             for key, model in model_dict.items():
                 state_dict[key+'_state_dict'] = model.state_dict()
-
             info['train_cnts'].append(train_cnt)
             info['epoch_cnt'] = epoch_cnt
             state_dict['info'] = info
-
             ckpt_filepath = os.path.join(base_filepath, "%s_%010dex.pt"%(base_filename, train_cnt))
             train_img_filepath = os.path.join(base_filepath,"%s_%010d_train_rec.png"%(base_filename, train_cnt))
             valid_img_filepath = os.path.join(base_filepath, "%s_%010d_valid_rec.png"%(base_filename, train_cnt))
@@ -247,6 +258,7 @@ def train_acn(train_cnt, epoch_cnt, model_dict, data_dict, info, rescale_inv):
                         info['train_losses'],
                         info['valid_losses'], name=plot_filepath, rolling_length=1)
 
+        torch.cuda.empty_cache()
 
 def call_plot(model_dict, data_dict, info, sample, tsne, pca):
     from acn_utils import tsne_plot
@@ -308,7 +320,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_threads', default=2)
     parser.add_argument('--tf_train_last_frame', action='store_true', default=False)
     parser.add_argument('-se', '--save_every_epochs', default=5, type=int)
-    parser.add_argument('-bs', '--batch_size', default=64, type=int)
+    parser.add_argument('-bs', '--batch_size', default=256, type=int)
     parser.add_argument('-lr', '--learning_rate', default=1e-4, type=float)
     parser.add_argument('--input_channels', default=1, type=int, help='num of channels of input')
     parser.add_argument('--target_channels', default=1, type=int, help='num of channels of target')
@@ -344,6 +356,7 @@ if __name__ == '__main__':
 
 
     args = parser.parse_args()
+    random_state = np.random.RandomState(args.seed)
     checkpoints_dir = get_checkpoints_dir()
     # note - when reloading model, this will use the seed given in args - not
     # the original random seed
@@ -368,16 +381,19 @@ if __name__ == '__main__':
                           valid=False, img_size=img_size)
     valid_ds = UVPDataset(csv_file=os.path.join(exp_dir, 'test.csv'),
                           seed=args.seed, valid=True, img_size=img_size)
-    train_sam = torch.utils.data.sampler.SubsetRandomSampler(indices=np.arange(len(train_ds)))
-    valid_sam = torch.utils.data.sampler.SubsetRandomSampler(indices=np.arange(len(train_ds)))
-    data_dict = {'train':torch.utils.data.DataLoader(train_ds,
-                                                     batch_size=args.batch_size,
-                                                     sampler=train_sam,
-                                                     num_workers=4),
-                 'valid':torch.utils.data.DataLoader(valid_ds,
-                                                     batch_size=args.batch_size,
-                                                     sampler=valid_sam,
-                                                     num_workers=2)}
+    data_dict = {'train':train_ds, 'valid':valid_ds}
+   # train_sam = torch.utils.data.sampler.SubsetRandomSampler(indices=np.arange(len(train_ds)))
+   # valid_sam = torch.utils.data.sampler.SubsetRandomSampler(indices=np.arange(len(valid_ds)))
+   # data_dict = {'train':torch.utils.data.DataLoader(train_ds,
+   #                                                  batch_size=args.batch_size,
+   #                                                  sampler=train_sam,
+   #                                                  num_workers=0),
+   #              'valid':torch.utils.data.DataLoader(valid_ds,
+   #                                                  batch_size=args.batch_size,
+   #                                                  sampler=valid_sam,
+   #                                                  num_workers=0)}
+
+
     if max([args.sample, args.tsne, args.pca]):
         call_plot(model_dict, data_dict, info, args.sample, args.tsne, args.pca)
     else:
