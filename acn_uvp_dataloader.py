@@ -50,7 +50,7 @@ class UVPDataset():
     def rotate_image(self, image, max_angle=45):
         #, center):
         angle = self.random_state.randint(-max_angle, max_angle)
-        rotated = transform.rotate(image, angle, resize=True, center=None, order=1, mode='constant', cval=0, clip=True, preserve_range=True)
+        rotated = transform.rotate(image, angle, resize=True, center=None, order=1, mode='constant', cval=255, clip=True, preserve_range=True).astype(np.uint8)
         return rotated
 
     def crop_to_creature(self, in_image, h, w, center_y, center_x):
@@ -82,6 +82,7 @@ class UVPDataset():
         ldim = np.argmax(image.shape)
         l = np.max(image.shape)
         if l > self.input_size:
+            print("DOWNSCALE")
             scale = self.input_size/float(l+1)
             image = transform.rescale(image, scale, preserve_range=True, multichannel=False).astype(np.uint8)
         return image
@@ -105,15 +106,25 @@ class UVPDataset():
         return centery, centerx
 
     def trim(self, image):
-        xs = np.where(image>0)[0]
-        ys = np.where(image>0)[1]
-        p = 5
-        leftx = max([0, np.min(ys)-p])
-        rightx = min([np.max(ys)+p, image.shape[0]])
-        # firstdim
-        topy = min([np.max(xs)+p, image.shape[1]])
-        boty = max([np.min(xs)-p, 0])
-        return image[leftx:rightx, boty:topy]
+        # image.shape -> 142,214
+        # image.sum(1) is 142 (y)
+        # image.sum(0) is 214 (x)
+
+        xs = image.sum(1)
+        ys = image.sum(0) 
+        xzero = np.where(xs>0)[0]
+        yzero = np.where(ys>0)[0]
+        p = 3
+        leftx = max([0, np.min(yzero)-p])
+        rightx = min([np.max(yzero)+1+p, image.shape[0]])
+        assert leftx < rightx
+        #embed()
+        ## firstdim
+        boty = max([np.min(xzero)-p, 0])
+        topy = min([np.max(xzero)+1+p, image.shape[1]])
+        assert boty < topy
+        oimage = image[boty:topy,leftx:rightx]
+        return oimage
 
     def __getitem__(self, idx):
         filepath = self.img_filepaths[idx]
@@ -126,13 +137,15 @@ class UVPDataset():
         # images have an annotation that gives the "1 mm" scale of the image
         hh,ww = image.shape
         # remove label at bottom
-        bottom = 45 #np.argmin(image.sum(1))-10
-        # flip to enable rotation which infills with 0
-        image = (255-image[:hh-bottom,:])
-        #image = (image[:hh-bottom,:])
-        image = image[:hh-bottom,:]
+        bottom = hh-50
+        # only search the bottom of the image for the line
+        bottom_line =  max([np.argmin(image.sum(1)), int(hh/3)])
+        image = image[:bottom_line-9,:]
         image = self.rotate_image(image)
-        image = self.trim(image)
+        # flip to enable rotation which infills with 0
+        #image = (255-image[:hh-bottom,:])
+        image = self.trim(255-image)
+        #image = -a+255
         image = self.downscale(image)
         image = self.add_padding(image)
         image = (2*(image.astype(np.float32)/255.))-1
@@ -146,9 +159,6 @@ if __name__ == '__main__':
     rs = np.random.RandomState(3)
     #train_ds = UVPDataset(csv_file=os.path.join(exp_dir,'valid.csv'), seed=34)
     train_ds = UVPDataset(csv_file=os.path.join(exp_dir,'train.csv'), seed=34, img_size=img_size)
-    #valid_ds = EcotaxaDataset(csv_file='valid.csv', seed=334, classes=class_names, weights=class_weights)
-    class_names = train_ds.classes
-    class_weights = train_ds.weights
     #ds = {'train':train_ds, 'valid':valid_ds}
     ds = {'train':train_ds}
     #for phase in ds.keys():
@@ -159,21 +169,24 @@ if __name__ == '__main__':
         #indexes = rs.choice(np.arange(len(ds[phase])), 10)
         indexes = np.arange(len(ds[phase]))
         for i in indexes:
-            image, class_num, filepath, idx = ds[phase][i]
-            print(idx, image.min(), image.max())
-            assert image.min() >= -1
-            assert image.max() <= 1
+            image = ds[phase][i]
+            filepath = ds[phase].img_filepaths[i]
+            print(i)#, image.min(), image.max())
+            #assert image.min() >= -1
+            #assert image.max() <= 1
             imo = imread(filepath)
             h,w,c = imo.shape
-            f,ax = plt.subplots(1,2)
-            ax[0].imshow(image[0].numpy())
-            ax[1].imshow(imo[:,:,0])
+            f,ax = plt.subplots(1,3)
+            ax[0].imshow(imo[:,:,0])
+            ax[1].imshow(image[0])
             img_name = os.path.split(filepath)[1]
-            ax[0].set_title("%s" %(train_ds.classes[class_num]))
+            #ax[0].set_title("%s" %(train_ds.classes[class_num]))
             #ax[1].set_title("%s %s" %(train_ds.large_classes[large_class_num], train_ds.small_classes[small_class_num]))
-            outpath = os.path.join(exdir, img_name)
+            outpath = os.path.join(exdir, '%06d.png'%i)
             print(outpath)
             plt.savefig(outpath)
             plt.close()
+            #if i > 5:
+                #sys.exit()
 
 
