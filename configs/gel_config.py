@@ -39,7 +39,7 @@ for mdir in mkdirs:
     if not os.path.exists(mdir):
         os.makedirs(mdir)
 
-img_size = 80
+img_size = 84
 
 # make unique checkpoints dir
 def get_checkpoints_dir(checkpoints_dir=''):

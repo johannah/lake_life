@@ -4,6 +4,7 @@ from PIL import Image
 import numpy as np
 import torchvision
 from torchvision import datasets, models, transforms
+import torch
 import os
 import sys
 from imageio import imread, imwrite
@@ -48,23 +49,23 @@ class UVPDataset(Dataset):
         # warning - if we don't capture all classes in the limit - then we will
         # not call the model correctly - should probably store the class_names
         # and numbers when training the model
-        if not valid:
-            func_transforms = [
-                torchvision.transforms.ColorJitter(hue=.1, saturation=.1,
-                                                   brightness=.1, contrast=.1),
-                # rotate looks bad when the critter is on the edge
-                #torchvision.transforms.RandomRotation(45, expand=False),
-                torchvision.transforms.Resize(size=(self.input_size, self.input_size)),
-                torchvision.transforms.RandomHorizontalFlip(),
-                transforms.RandomVerticalFlip(),
-                transforms.ToTensor(),
-                 ]
-        else:
-            func_transforms = [
-                torchvision.transforms.Resize(size=(self.input_size, self.input_size)),
-                transforms.ToTensor(),
-                 ]
-        self.transforms = torchvision.transforms.Compose(func_transforms)
+        #if not valid:
+        #    func_transforms = [
+        #        torchvision.transforms.ColorJitter(hue=.1, saturation=.1,
+        #                                           brightness=.1, contrast=.1),
+        #        # rotate looks bad when the critter is on the edge
+        #        #torchvision.transforms.RandomRotation(45, expand=False),
+        #        torchvision.transforms.Resize(size=(self.input_size, self.input_size)),
+        #        torchvision.transforms.RandomHorizontalFlip(),
+        #        transforms.RandomVerticalFlip(),
+        #        transforms.ToTensor(),
+        #         ]
+        #else:
+        #    func_transforms = [
+        #        torchvision.transforms.Resize(size=(self.input_size, self.input_size)),
+        #        transforms.ToTensor(),
+        #         ]
+        #self.transforms = torchvision.transforms.Compose(func_transforms)
         self.indexes = np.arange(len(self.img_filepaths))
         # https://pytorch.org/docs/stable/_modules/torch/nn/modules/adaptive.html#AdaptiveLogSoftmaxWithLoss
         # when using adaptive loss - largest classes should have the lowest
@@ -88,7 +89,7 @@ class UVPDataset(Dataset):
         #if run_mean is None:
         #     run_mean, run_std = self.find_mean_std()
         #func_transforms.append(transforms.Normalize([run_mean], [run_std]))
-        self.transforms = torchvision.transforms.Compose(func_transforms)
+        #self.transforms = torchvision.transforms.Compose(func_transforms)
 
     def find_mean_std(self):
         limit = int(0.15*self.__len__())
@@ -192,11 +193,12 @@ class UVPDataset(Dataset):
     def trim(self, image):
         xs = np.where(image>0)[0]
         ys = np.where(image>0)[1]
-        leftx = max([0, np.min(ys)-10])
-        rightx = min([np.max(ys)+10, image.shape[0]])
+        p = 5
+        leftx = max([0, np.min(ys)-p])
+        rightx = min([np.max(ys)+p, image.shape[0]])
         # firstdim
-        topy = min([np.max(xs)+10, image.shape[1]])
-        boty = max([np.min(xs)-10, 0])
+        topy = min([np.max(xs)+p, image.shape[1]])
+        boty = max([np.min(xs)-p, 0])
         return image[leftx:rightx, boty:topy]
 
     def __getitem__(self, idx):
@@ -221,14 +223,9 @@ class UVPDataset(Dataset):
         image = self.trim(image)
         image = self.downscale(image)
         image = self.add_padding(image)
-        #center_y, center_x = self.get_center(image)
-        #image = self.crop_to_size(image, self.input_size, self.input_size, center_y, center_x)
-        #print("crop size", image.shape)
-        ## turn into PIL
-        image = Image.fromarray(image)
-        #image = self.trim(image, 0)
-        ## normalize between 0 and 1 seems to hurt
-        timage = self.transforms(image)
+        print(image.shape)
+        image = (2*(image.astype(np.float32)/255.))-1
+        timage = torch.FloatTensor(image[None])
         return timage, class_num, filepath, idx
 
 if __name__ == '__main__':
@@ -250,7 +247,6 @@ if __name__ == '__main__':
         if not os.path.exists(exdir):
             os.makedirs(exdir)
         indexes = rs.choice(np.arange(len(ds[phase])), 10)
-
         for i in indexes:
             image, class_num, filepath, idx = ds[phase][i]
             imo = imread(filepath)
