@@ -113,10 +113,8 @@ def clip_parameters(model_dict, clip_val=10):
 def forward_pass(model_dict, images, index_indexes, phase, info):
     # prepare data in appropriate way
     bs,c,h,w = images.shape
-    images = images.to(info['device'], non_blocking=True)
-    vimages = F.dropout(images, p=info['dropout_rate'], training=phase=='train', inplace=False)
-    # put action cond and reward cond in and project to same size as state
-    z, u_q = model_dict['vq_acn_model'](vimages)
+    images = images.to(info['device'])
+    z, u_q = model_dict['vq_acn_model'](F.dropout(images, p=info['dropout_rate'], training=phase=='train', inplace=False))
     u_q_flat = u_q.view(bs, info['code_length'])
     if phase == 'train':
         # check that we are getting what we think we are getting from the replay
@@ -160,46 +158,48 @@ def run(train_cnt, model_dict, data_dict, phase, info):
         for key in model_dict.keys():
             model_dict[key].zero_grad()
         images = torch.stack([torch.FloatTensor(dataset[bi]) for bi in batch_indexes])
-        images = images.to(info['device'])
-        fp_out = forward_pass(model_dict, images, batch_indexes, phase, info)
-        model_dict, images, rec_dml, u_q, u_p, s_p, rec_dml, z_e_x, z_q_x, latents = fp_out
-        bs,c,h,w = images.shape
+        #with torch.autograd.profiler.profile(use_cuda=True) as prof:
+        if 1:
+            fp_out = forward_pass(model_dict, images, batch_indexes, phase, info)
+            model_dict, images, rec_dml, u_q, u_p, s_p, rec_dml, z_e_x, z_q_x, latents = fp_out
+            bs,c,h,w = images.shape
 
-        if batch_cnt == 0:
-            log_ones = torch.zeros(bs, info['code_length']).to(info['device'])
-        if bs != log_ones.shape[0]:
-            log_ones = torch.zeros(bs, info['code_length']).to(info['device'])
-        kl = kl_loss_function(u_q.view(bs, info['code_length']), log_ones,
-                              u_p.view(bs, info['code_length']), s_p.view(bs, info['code_length']),
-                              reduction=info['reduction'])
-        rec_loss = discretized_mix_logistic_loss(rec_dml, images, nr_mix=info['nr_logistic_mix'], reduction=info['reduction'])
-        vq_loss = F.mse_loss(z_q_x, z_e_x.detach(), reduction=info['reduction'])
-        commit_loss = F.mse_loss(z_e_x, z_q_x.detach(), reduction=info['reduction'])
-        commit_loss *= info['vq_commitment_beta']
-        loss = kl+rec_loss+commit_loss+vq_loss
-        loss_dict['running']+=bs
-        loss_dict['loss']+=loss.detach().cpu().item()
-        loss_dict['kl']+= kl.detach().cpu().item()
-        loss_dict['vq']+= vq_loss.detach().cpu().item()
-        loss_dict['commit']+= commit_loss.detach().cpu().item()
-        loss_dict['rec_%s'%info['rec_loss_type']]+=rec_loss.detach().cpu().item()
-        if phase == 'train':
-            model_dict = clip_parameters(model_dict)
-            loss.backward()
-            model_dict['opt'].step()
-            train_cnt+=bs
-        if batch_cnt == num_batches-1:
-            # store example near end for plotting
-            rec_yhat = sample_from_discretized_mix_logistic(rec_dml, info['nr_logistic_mix'], only_mean=info['sample_mean'], sampling_temperature=info['sampling_temperature'])
-            example = {
-                       'target':images.detach().cpu().numpy(),
+            if batch_cnt == 0:
+                log_ones = torch.zeros(bs, info['code_length']).to(info['device'])
+            if bs != log_ones.shape[0]:
+                log_ones = torch.zeros(bs, info['code_length']).to(info['device'])
+            kl = kl_loss_function(u_q.view(bs, info['code_length']), log_ones,
+                                  u_p.view(bs, info['code_length']), s_p.view(bs, info['code_length']),
+                                  reduction=info['reduction'])
+            rec_loss = discretized_mix_logistic_loss(rec_dml, images, nr_mix=info['nr_logistic_mix'], reduction=info['reduction'])
+            vq_loss = F.mse_loss(z_q_x, z_e_x.detach(), reduction=info['reduction'])
+            commit_loss = F.mse_loss(z_e_x, z_q_x.detach(), reduction=info['reduction'])
+            commit_loss *= info['vq_commitment_beta']
+            loss = kl+rec_loss+commit_loss+vq_loss
+            loss_dict['running']+=bs
+            loss_dict['loss']+=loss.detach().cpu().item()
+            loss_dict['kl']+= kl.detach().cpu().item()
+            loss_dict['vq']+= vq_loss.detach().cpu().item()
+            loss_dict['commit']+= commit_loss.detach().cpu().item()
+            loss_dict['rec_%s'%info['rec_loss_type']]+=rec_loss.detach().cpu().item()
+            if phase == 'train':
+                model_dict = clip_parameters(model_dict)
+                loss.backward()
+                model_dict['opt'].step()
+                train_cnt+=bs
+            if batch_cnt == num_batches-1:
+                # store example near end for plotting
+                rec_yhat = sample_from_discretized_mix_logistic(rec_dml, info['nr_logistic_mix'], only_mean=info['sample_mean'], sampling_temperature=info['sampling_temperature'])
+                example = {
+                      'target':images.detach().cpu().numpy(),
                        'rec':rec_yhat.detach().cpu().numpy(),
                        }
-
+        #print(prof)
         if not batch_cnt % 100:
             print(train_cnt, batch_cnt, account_losses(loss_dict))
             print(phase, 'cuda', torch.cuda.memory_allocated(device=None))
         batch_cnt+=1
+
 
     loss_avg = account_losses(loss_dict)
     torch.cuda.empty_cache()
@@ -207,6 +207,7 @@ def run(train_cnt, model_dict, data_dict, phase, info):
                                                 time.time()-st,
                                                 train_cnt,
                                                 ))
+    del images
     return loss_avg, example
 
 
@@ -217,8 +218,7 @@ def train_acn(train_cnt, epoch_cnt, model_dict, data_dict, info, rescale_inv):
     while train_cnt < info['num_examples_to_train']:
         print('starting epoch %s on %s'%(epoch_cnt, info['device']))
 
-        with torch.autograd.profiler.profile(use_cuda=info['device']=='cuda') as prof:
-            train_loss_avg, train_example = run(train_cnt,
+        train_loss_avg, train_example = run(train_cnt,
                                                 model_dict,
                                                 data_dict,
                                                 phase='train', info=info)
@@ -232,7 +232,7 @@ def train_acn(train_cnt, epoch_cnt, model_dict, data_dict, info, rescale_inv):
                                                  model_dict,
                                                  data_dict,
                                                  phase='valid', info=info)
-            for loss_key in valid_loss_avg.keys():
+            for loss_key in train_loss_avg.keys():
                 for lphase in ['train_losses', 'valid_losses']:
                     if loss_key not in info[lphase].keys():
                         info[lphase][loss_key] = []
@@ -326,7 +326,7 @@ if __name__ == '__main__':
     parser.add_argument('--target_channels', default=1, type=int, help='num of channels of target')
     parser.add_argument('--num_examples_to_train', default=50000000, type=int)
     parser.add_argument('-e', '--exp_name', default='mid_1e6trfreeway_spvq_twgrad', help='name of experiment')
-    parser.add_argument('-dr', '--dropout_rate', default=0.2, type=float)
+    parser.add_argument('-dr', '--dropout_rate', default=0.01, type=float)
     parser.add_argument('-r', '--reduction', default='sum', type=str, choices=['sum', 'mean'])
     parser.add_argument('--rec_loss_type', default='dml', type=str, help='name of loss. options are dml', choices=['dml'])
     parser.add_argument('--nr_logistic_mix', default=10, type=int)

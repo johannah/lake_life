@@ -82,7 +82,6 @@ class UVPDataset():
         ldim = np.argmax(image.shape)
         l = np.max(image.shape)
         if l > self.input_size:
-            print("DOWNSCALE")
             scale = self.input_size/float(l+1)
             image = transform.rescale(image, scale, preserve_range=True, multichannel=False).astype(np.uint8)
         return image
@@ -111,7 +110,7 @@ class UVPDataset():
         # image.sum(0) is 214 (x)
 
         xs = image.sum(1)
-        ys = image.sum(0) 
+        ys = image.sum(0)
         xzero = np.where(xs>0)[0]
         yzero = np.where(ys>0)[0]
         p = 3
