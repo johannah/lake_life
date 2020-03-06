@@ -1,5 +1,3 @@
-import PIL
-from PIL import Image
 import numpy as np
 import os
 import sys
@@ -8,11 +6,13 @@ from IPython import embed
 from skimage import transform
 from skimage.feature import blob_doh
 from copy import deepcopy
-from PIL import Image, ImageChops
+from PIL import Image
+from torch.utils.data import Dataset
+from torchvision import transforms
 
-class UVPDataset():
+class UVPDataset(Dataset):
     def __init__(self, csv_file, seed, classes='', labels='', weights='', valid=False,
-                 run_mean=0, run_std=0, find_class_counts=True, limit=1e10, img_size=224):
+                 limit=1e10, img_size=224):
         #run_mean=0.9981, run_std=.0160):
         """
         Args:
@@ -43,7 +43,17 @@ class UVPDataset():
         # TODO - find actual mean/std
         print("dataset has %s examples - limit is %s" %(len(self.img_classes), self.limit))
         self.indexes = np.arange(len(self.img_filepaths))
-
+        if not valid:
+            func_transforms = [transforms.ColorJitter(brightness=.3, contrast=.3, hue=.3),
+                               transforms.RandomVerticalFlip(),
+                               transforms.RandomHorizontalFlip(),
+                               transforms.RandomResizedCrop(size=(self.input_size, self.input_size), scale=(.7, 1.0)),
+                               transforms.ToTensor(), ]
+        else:
+            func_transforms = [
+                    transforms.ToTensor()]
+        self.transforms = transforms.Compose(func_transforms)
+    
     def __len__(self):
         return len(self.img_filepaths)
 
@@ -117,7 +127,6 @@ class UVPDataset():
         leftx = max([0, np.min(yzero)-p])
         rightx = min([np.max(yzero)+1+p, image.shape[0]])
         assert leftx < rightx
-        #embed()
         ## firstdim
         boty = max([np.min(xzero)-p, 0])
         topy = min([np.max(xzero)+1+p, image.shape[1]])
@@ -147,8 +156,9 @@ class UVPDataset():
         #image = -a+255
         image = self.downscale(image)
         image = self.add_padding(image)
-        image = (2*(image.astype(np.float32)/255.))-1
-        return image[None]
+        image = Image.fromarray(image)
+        image = self.transforms(image)
+        return image
 
 if __name__ == '__main__':
     import matplotlib
@@ -175,9 +185,10 @@ if __name__ == '__main__':
             #assert image.max() <= 1
             imo = imread(filepath)
             h,w,c = imo.shape
-            f,ax = plt.subplots(1,3)
+            f,ax = plt.subplots(1,2)
             ax[0].imshow(imo[:,:,0])
-            ax[1].imshow(image[0])
+            ax[1].imshow(image[0].cpu().numpy())
+            print(image.min(), image.max())
             img_name = os.path.split(filepath)[1]
             #ax[0].set_title("%s" %(train_ds.classes[class_num]))
             #ax[1].set_title("%s %s" %(train_ds.large_classes[large_class_num], train_ds.small_classes[small_class_num]))
