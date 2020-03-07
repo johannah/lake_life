@@ -164,6 +164,7 @@ class UVPDataset(Dataset):
         return image
 
 if __name__ == '__main__':
+    import torch
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -180,17 +181,21 @@ if __name__ == '__main__':
             os.makedirs(exdir)
         #indexes = rs.choice(np.arange(len(ds[phase])), 10)
         indexes = np.arange(len(ds[phase]))
+        n = 9
         for i in indexes:
-            image = ds[phase][i]
+            image = torch.stack([ds[phase][i] for _ in range(n+1)])
             filepath = ds[phase].img_filepaths[i]
             print(i)#, image.min(), image.max())
             #assert image.min() >= -1
             #assert image.max() <= 1
             imo = imread(filepath)
             h,w,c = imo.shape
-            f,ax = plt.subplots(1,2)
+            image = image[:,0].cpu().numpy()
+            f,ax = plt.subplots(1,10)
             ax[0].imshow(imo[:,:,0])
-            ax[1].imshow(image[0].cpu().numpy())
+            [ax[xx+1].imshow(image[xx]) for xx in range(n)]
+
+            [ax[xx].axis('off') for xx in range(n+1)]
             print(image.min(), image.max())
             img_name = os.path.split(filepath)[1]
             #ax[0].set_title("%s" %(train_ds.classes[class_num]))
