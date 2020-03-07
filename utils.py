@@ -465,7 +465,6 @@ def sample_from_discretized_mix_logistic(l, nr_mix, only_mean=True, deterministi
 
     # unpack parameters
     logit_probs = l[:, :, :, :nr_mix]
-    #from IPython import embed; embed()
     l = l[:, :, :, nr_mix:].contiguous().view(xs + [nr_mix * 2])
     # sample mixture indicator from softmax
     noise = torch.FloatTensor(logit_probs.size())

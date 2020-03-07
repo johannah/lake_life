@@ -25,6 +25,7 @@ class UVPDataset(Dataset):
         self.img_classes = []
         self.random_state = np.random.RandomState(seed)
         # load file data
+        self.valid = valid
         self.input_size = img_size
         print('loading csv:%s'%csv_file)
         assert os.path.exists(csv_file); # csv file given doesnt exist
@@ -50,10 +51,11 @@ class UVPDataset(Dataset):
                                transforms.RandomResizedCrop(size=(self.input_size, self.input_size), scale=(.7, 1.0)),
                                transforms.ToTensor(), ]
         else:
+            print("creating simple validation transform")
             func_transforms = [
                     transforms.ToTensor()]
         self.transforms = transforms.Compose(func_transforms)
-    
+
     def __len__(self):
         return len(self.img_filepaths)
 
@@ -145,11 +147,12 @@ class UVPDataset(Dataset):
         # images have an annotation that gives the "1 mm" scale of the image
         hh,ww = image.shape
         # remove label at bottom
-        bottom = hh-50
+        #bottom = hh-50
         # only search the bottom of the image for the line
         bottom_line =  max([np.argmin(image.sum(1)), int(hh/3)])
         image = image[:bottom_line-9,:]
-        image = self.rotate_image(image)
+        if not self.valid:
+            image = self.rotate_image(image)
         # flip to enable rotation which infills with 0
         #image = (255-image[:hh-bottom,:])
         image = self.trim(255-image)

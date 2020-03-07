@@ -110,17 +110,21 @@ def clip_parameters(model_dict, clip_val=10):
             clip_grad_value_(model.parameters(), clip_val)
     return model_dict
 
-def forward_pass(model_dict, images, index_indexes, phase, info):
+def forward_pass(model_dict, dataset, batch_indexes, phase, info):
     # prepare data in appropriate way
+    images = torch.stack([dataset[bi] for bi in batch_indexes])
+    # input is bt 0 and 1
+    images = (images*2)-1
     bs,c,h,w = images.shape
     images = images.to(info['device'])
-    z, u_q = model_dict['vq_acn_model'](F.dropout(images, p=info['dropout_rate'], training=phase=='train', inplace=False))
+    #z, u_q = model_dict['vq_acn_model'](F.dropout(images, p=info['dropout_rate'], training=phase=='train', inplace=False))
+    z, u_q = model_dict['vq_acn_model'](images)
     u_q_flat = u_q.view(bs, info['code_length'])
     if phase == 'train':
         # check that we are getting what we think we are getting from the replay
         # buffer
-        assert index_indexes.max() < model_dict['prior_model'].codes.shape[0]
-        model_dict['prior_model'].update_codebook(index_indexes, u_q_flat.detach())
+        assert batch_indexes.max() < model_dict['prior_model'].codes.shape[0]
+        model_dict['prior_model'].update_codebook(batch_indexes, u_q_flat.detach())
     rec_dml, z_e_x, z_q_x, latents =  model_dict['vq_acn_model'].decode(z)
     u_p, s_p = model_dict['prior_model'](u_q_flat)
     u_p = u_p.view(bs, 3, 8, 8)
@@ -157,10 +161,9 @@ def run(train_cnt, model_dict, data_dict, phase, info):
     for batch_indexes in batch_indexes_list:
         for key in model_dict.keys():
             model_dict[key].zero_grad()
-        images = torch.stack([torch.FloatTensor(dataset[bi]) for bi in batch_indexes])
         #with torch.autograd.profiler.profile(use_cuda=True) as prof:
         if 1:
-            fp_out = forward_pass(model_dict, images, batch_indexes, phase, info)
+            fp_out = forward_pass(model_dict, dataset, batch_indexes, phase, info)
             model_dict, images, rec_dml, u_q, u_p, s_p, rec_dml, z_e_x, z_q_x, latents = fp_out
             bs,c,h,w = images.shape
 
@@ -261,52 +264,52 @@ def train_acn(train_cnt, epoch_cnt, model_dict, data_dict, info, rescale_inv):
         torch.cuda.empty_cache()
 
 def call_plot(model_dict, data_dict, info, sample, tsne, pca):
-    from acn_utils import tsne_plot
-    from acn_utils import pca_plot
+    from utils import tsne_plot
+    from utils import pca_plot
+    from sklearn.cluster import KMeans
     # always be in eval mode - so we dont swap neighbors
     model_dict = set_model_mode(model_dict, 'valid')
     with torch.no_grad():
         for phase in ['valid', 'train']:
-            data_loader = data_dict[phase]
-            for data in data_loader:
-                images, class_num, filepath, idx = data
-                fp_out = forward_pass(model_dict, images, idx, phase, info)
-                model_dict, states, actions, rewards, target, u_q, u_p, s_p, rec_dml, z_e_x, z_q_x, latents = fp_out
-                rec_yhat = sample_from_discretized_mix_logistic(rec_dml, info['nr_logistic_mix'], only_mean=info['sample_mean'], sampling_temperature=info['sampling_temperature'])
-                f,ax = plt.subplots(10,3)
-                ax[0,0].set_title('prev')
-                ax[0,1].set_title('true')
-                ax[0,2].set_title('pred')
-                for i in range(10):
-                    ax[i,0].matshow(states[i,-1])
-                    ax[i,1].matshow(target[i,-1])
-                    ax[i,2].matshow(rec_yhat[i,-1])
-                    ax[i,0].axis('off')
-                    ax[i,1].axis('off')
-                    ax[i,2].axis('off')
-                plt.subplots_adjust(wspace=0, hspace=0)
-                plt.tight_layout()
+            dataset = data_dict[phase]
+            batch_indexes = make_batches(dataset, info['batch_size'])[0]
+            fp_out = forward_pass(model_dict, dataset, batch_indexes, phase, info)
+            model_dict, images, rec_dml, u_q, u_p, s_p, rec_dml, z_e_x, z_q_x, latents = fp_out
+            rec_yhat = sample_from_discretized_mix_logistic(rec_dml, info['nr_logistic_mix'], only_mean=info['sample_mean'], sampling_temperature=info['sampling_temperature'])
+            images = images.detach().cpu().numpy()
+            rec = rec_yhat.detach().cpu().numpy()
+            bs,c,h,w=images.shape
+            n = min([5,bs])
+            f,ax = plt.subplots(n,2)
+            ax[0,0].set_title('true')
+            ax[0,1].set_title('rec')
+            for i in range(n):
+                ax[i,0].matshow(images[i,0])
+                ax[i,1].matshow(rec[i,0])
+                ax[i,0].axis('off')
+                ax[i,1].axis('off')
+            plt.subplots_adjust(wspace=0, hspace=0)
+            plt.tight_layout()
 
-                plt_path = info['model_loadpath'].replace('.pt', '_%s_plt.png'%phase)
-                print('plotting', plt_path)
-                plt.savefig(plt_path)
-                bs = states.shape[0]
-                u_q_flat = u_q.view(bs, info['code_length'])
-                X = u_q_flat.cpu().numpy()
-                color = index_indexes
-                images = target[:,0].cpu().numpy()
-                if tsne:
-                    param_name = '_tsne_%s_P%s.html'%(phase, info['perplexity'])
-                    html_path = info['model_loadpath'].replace('.pt', param_name)
-                    tsne_plot(X=X, images=images, color=color,
-                          perplexity=info['perplexity'],
+            plt_path = info['model_loadpath'].replace('.pt', '_%s_plt.png'%phase)
+            print('plotting', plt_path)
+            plt.savefig(plt_path)
+            u_q_flat = u_q.view(bs, info['code_length'])
+            X = u_q_flat.cpu().numpy()
+            km = KMeans(n_clusters=8)
+            y = km.fit_predict(X)
+            color =  y#batch_indexes
+            if tsne:
+                param_name = '_tsne_%s_P%s.html'%(phase, info['perplexity'])
+                html_path = info['model_loadpath'].replace('.pt', param_name)
+                tsne_plot(X=X, images=images[:,0], color=color,
+                      perplexity=info['perplexity'],
+                      html_out_path=html_path, serve=False)
+            if pca:
+                param_name = '_pca_%s.html'%(phase)
+                html_path = info['model_loadpath'].replace('.pt', param_name)
+                pca_plot(X=X, images=images[:,0], color=color,
                           html_out_path=html_path, serve=False)
-                if pca:
-                    param_name = '_pca_%s.html'%(phase)
-                    html_path = info['model_loadpath'].replace('.pt', param_name)
-                    pca_plot(X=X, images=images, color=color,
-                              html_out_path=html_path, serve=False)
-                break
 
 
 if __name__ == '__main__':
