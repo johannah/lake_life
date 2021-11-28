@@ -34,7 +34,7 @@ Use a hierarchical loss with a pre-trained resnet to train this unbalanced datas
 
 Confusion matrix from this model: 
 
-[!alt text](https://github.com/johannah/lake_life/blob/master/ckptwt_eval00160_train_normalized_confusion.png)
+![alt text](https://github.com/johannah/lake_life/blob/master/ckptwt_eval00160_train_normalized_confusion.png)
 
 ## Train ACN to Enable Easy Labeling 
 
@@ -44,6 +44,6 @@ Train an [Associative Compressive Network (ACN)](https://arxiv.org/abs/1804.0247
 
 Given image on the left, the model finds the most similiar images from unlabeled data on the right:
 
-[!alt text](https://github.com/johannah/lake_life/blob/master/000066.png)
+![alt text](https://github.com/johannah/lake_life/blob/master/000066.png)
 
-[!alt text](https://github.com/johannah/lake_life/blob/master/000091.png)
+![alt text](https://github.com/johannah/lake_life/blob/master/000091.png)
