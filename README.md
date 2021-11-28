@@ -25,4 +25,4 @@ Download images and tsv files from private data source into UVP_data_folder. Zip
 
 # Train
 
-'python train_resnet.py`
+`python train_resnet.py`
